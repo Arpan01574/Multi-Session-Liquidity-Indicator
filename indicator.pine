@@ -1,23 +1,23 @@
 //@version=6
-//ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  ARPAN'S TRADING SESSIONS PRO
-//  Sessions ┬╖ Liquidity state machine ┬╖ Session bias engine ┬╖ Macro levels ┬╖ Dashboard
+//  Sessions · Liquidity state machine · Session bias engine · Macro levels · Dashboard
 //
 //  Phase / bias / flow / ADL / divergence are rule-based readings of price and volume.
 //  They are heuristics, not proof of institutional activity and not a prediction.
 //
 //  Revision notes
-//   ┬╖ Dashboard is live on every tick. It no longer waits for a bar to close, and a new session
+//   · Dashboard is live on every tick. It no longer waits for a bar to close, and a new session
 //     (Europe, USA, Asia) shows on the dashboard from its very first bar.
-//   ┬╖ Macro levels (PDH/PDL, PWH/PWL, PMH/PML, DO/WO/MO, NY 00:00) can be drawn as a strip in the
+//   · Macro levels (PDH/PDL, PWH/PWL, PMH/PML, DO/WO/MO, NY 00:00) can be drawn as a strip in the
 //     empty space to the right of the last candle, with a gap, so they never sit on top of candles.
-//   ┬╖ A session that is still building its range is shown as FORMING instead of DEAD.
-//   ┬╖ Flow oscillator guarded against zero volume; PDH/PDL/PWH/PWL alerts no longer fire when the level rolls over.
-//ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+//   · A session that is still building its range is shown as FORMING instead of DEAD.
+//   · Flow oscillator guarded against zero volume; PDH/PDL/PWH/PWL alerts no longer fire when the level rolls over.
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 indicator("Arpan's Trading Sessions", shorttitle = "Trading Sessions", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 500)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 1 ┬╖ INPUTS
+// 1 · INPUTS
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 G_BOX = "Session Boxes"
 G_LIN = "Session Lines & Liquidity"
@@ -29,7 +29,7 @@ G_UI  = "UI & Aesthetics"
 G_ALR = "Alerts"
 G_ADV = "Advanced / Engine"
 
-// ΓöÇΓöÇ Session Boxes (session times are in each exchange's own timezone, DST handled automatically)
+// ── Session Boxes (session times are in each exchange's own timezone, DST handled automatically)
 show_syd = input.bool(true, "Sydney", inline = "syd", group = G_BOX)
 col_syd  = input.color(#00c853, "", inline = "syd", group = G_BOX)
 ses_syd  = input.session("1000-1600", "", inline = "syd", group = G_BOX)
