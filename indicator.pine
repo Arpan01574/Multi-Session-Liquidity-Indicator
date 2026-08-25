@@ -49,7 +49,7 @@ merge_asia = input.bool(false, "Merge Asian box (Sydney + Tokyo + Shanghai)", gr
 skip_wknd  = input.bool(false, "Hide weekend sessions (24/7 crypto)", group = G_BOX)
 hist_n     = input.int(10, "Sessions kept on chart (per session)", minval = 1, maxval = 100, group = G_BOX, tooltip = "TradingView caps each drawing type at 500 objects. The script lowers this automatically when your settings would exceed the cap (a notice appears in the dashboard).")
 
-// ΓöÇΓöÇ Session Lines & Liquidity
+// ── Session Lines & Liquidity
 mid_all  = input.bool(true, "Midline", inline = "m1", group = G_LIN, tooltip = "First tick = master switch for all midlines. The next three ticks choose the region.")
 mid_asia = input.bool(true, "Asia", inline = "m1", group = G_LIN)
 mid_eur  = input.bool(true, "Europe", inline = "m1", group = G_LIN)
@@ -65,7 +65,7 @@ mid_w       = input.int(1, "Width", minval = 1, maxval = 4, inline = "ms1", grou
 hl_style_s  = input.string("Solid", "H/L style", options = ["Solid", "Dashed", "Dotted"], inline = "hs1", group = G_LIN)
 hl_w        = input.int(1, "Width", minval = 1, maxval = 4, inline = "hs1", group = G_LIN)
 ext_mode    = input.string("Until swept", "Carry forward previous H/L", options = ["Until swept", "Until next session", "None"], group = G_LIN, tooltip = "Until swept = liquidity pools stay on the chart until the sweep definition below is met.\nUntil next session = line is cut when the same session starts again.\nNone = no carry forward (line ends with the session).")
-show_sweep_mk = input.bool(true, "Mark swept levels with ├ù", group = G_LIN)
+show_sweep_mk = input.bool(true, "Mark swept levels with ×", group = G_LIN)
 ref_mode    = input.string("Previous Macro Session", "Liquidity reference", options = ["Previous Macro Session", "Previous Same Session", "Both"], group = G_LIN, tooltip = "Reference H/L a session is judged against.\nPrevious Macro Session: Europe uses Asia, USA uses Europe (Europe's H/L so far if it is still running), Asia uses USA.\nPrevious Same Session: the last completed session of the same type.\nBoth: the outer envelope of the two (highest high / lowest low).\nReferences are frozen when the session starts and never use the session's own developing H/L.")
 sweep_def   = input.string("Wick Through", "Sweep definition", options = ["Wick Through", "Close Through", "Wick + Rejection", "Wick + Close Back Inside"], group = G_LIN, tooltip = "Wick Through: high/low trades beyond the level.\nClose Through: a bar closes beyond the level.\nWick + Rejection: wick beyond the level and the rejection wick is at least the % below of that bar's range.\nWick + Close Back Inside: wick beyond the level and a bar closes back inside within the max bars below.")
 sweep_dist  = input.int(0, "Min sweep distance (ticks)", minval = 0, group = G_LIN, tooltip = "Price must trade (or close) this many ticks beyond a level before it counts.")
@@ -76,7 +76,7 @@ acc_bars    = input.int(3, "Bars", minval = 1, maxval = 20, inline = "acc1", gro
 acc_min     = input.int(0, "Min close beyond level (ticks)", minval = 0, group = G_LIN)
 acc_retest  = input.bool(false, "Retest required before acceptance", group = G_LIN, tooltip = "A bar must pull back to the level and still close beyond it before the breakout is accepted.")
 
-// ΓöÇΓöÇ Macro Liquidity
+// ── Macro Liquidity
 show_pd = input.bool(true, "Previous Day H/L", inline = "pd", group = G_MAC)
 col_pd  = input.color(#9e9e9e, "", inline = "pd", group = G_MAC)
 show_pw = input.bool(true, "Previous Week H/L", inline = "pw", group = G_MAC)
@@ -102,7 +102,7 @@ lvl_ext     = input.bool(true, "Keep lines going to the price axis", group = G_M
 lvl_lbl_pos = input.string("Fixed offset", "Label position (strip)", options = ["Fixed offset", "Line start", "Line end"], inline = "lp", group = G_MAC, tooltip = "Fixed offset: label sits a set number of bars after the live candle, just above its line.\nLine start: label sits just above the first point of the line.\nLine end: label sits after the last point of the line (needs a finite strip; you must scroll right to see it).")
 lvl_lbl_gap = input.int(40, "Offset (bars)", minval = 0, maxval = 300, inline = "lp", group = G_MAC, tooltip = "Fixed offset only: distance from the live candle to the label. It is never placed left of the line start.")
 
-// ΓöÇΓöÇ Bias / Intelligence
+// ── Bias / Intelligence
 range_bench = input.string("SMA", "Range benchmark", options = ["SMA", "EMA", "Median"], inline = "rb", group = G_BIA, tooltip = "Benchmark session range. Built only from PRIOR completed sessions, never from the session being classified.")
 range_len   = input.int(12, "Lookback (sessions)", minval = 3, maxval = 30, inline = "rb", group = G_BIA)
 adr_len     = input.int(14, "ADR length (days)", minval = 2, maxval = 60, group = G_BIA)
@@ -146,14 +146,14 @@ req_div  = input.bool(false, "Expansion requires no opposing divergence", group 
 req_acc  = input.bool(false, "Expansion requires an accepted breakout", group = G_BIA)
 req_str  = input.bool(true, "Trend phases require structure", group = G_BIA)
 
-// ΓöÇΓöÇ Dashboard
+// ── Dashboard
 show_dash   = input.bool(true, "Show smart range dashboard", group = G_DSH)
 dash_detail = input.string("Standard", "Detail level", options = ["Compact", "Standard", "Advanced"], group = G_DSH, tooltip = "Compact: SESSION / PHASE / LIQUIDITY / BIAS\nStandard: + RANGE / % ADR\nAdvanced: + BAR VOL / FLOW / STRUCTURE")
 dash_pos_s  = input.string("Top Right", "Position", options = ["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group = G_DSH)
 dash_size_s = input.string("Small", "Text size", options = ["Tiny", "Small", "Normal"], group = G_DSH)
 dash_theme  = input.string("Dark", "Theme", options = ["Dark", "Light", "Auto (chart)"], group = G_DSH)
 
-// ΓöÇΓöÇ Killzones & Overlap (evaluated in New York time)
+// ── Killzones & Overlap (evaluated in New York time)
 show_ovl = input.bool(false, "Highlight Europe x USA overlap", inline = "ovl", group = G_KZ)
 col_ovl  = input.color(#ffd600, "", inline = "ovl", group = G_KZ)
 show_kz1 = input.bool(false, "Asia KZ", inline = "k1", group = G_KZ)
@@ -169,7 +169,7 @@ show_kz4 = input.bool(false, "Europe Close KZ", inline = "k4", group = G_KZ)
 col_kz4  = input.color(#00c853, "", inline = "k4", group = G_KZ)
 ses_kz4  = input.session("1000-1200", "", inline = "k4", group = G_KZ)
 
-// ΓöÇΓöÇ UI & Aesthetics
+// ── UI & Aesthetics
 name_mode      = input.string("City (London / New York)", "Session naming", options = ["Region (Europe / USA)", "City (London / New York)"], group = G_UI, tooltip = "Names used in the dashboard, box tags, price labels and phase labels. Session times are unchanged.")
 bg_tr          = input.int(88, "Box fill transparency", minval = 0, maxval = 100, group = G_UI)
 show_border    = input.bool(true, "Box borders", inline = "bd1", group = G_UI)
