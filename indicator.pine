@@ -1,33 +1,287 @@
 //@version=6
-indicator(
-    "Arpan's Trading Sessions",
-    overlay = true,
-    max_boxes_count = 5000,
-    max_lines_count = 500,
-    max_labels_count = 500,
-    max_bars_back   = 5000
-)
+//ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+//  ARPAN'S TRADING SESSIONS PRO
+//  Sessions ┬╖ Liquidity state machine ┬╖ Session bias engine ┬╖ Macro levels ┬╖ Dashboard
+//
+//  Phase / bias / flow / ADL / divergence are rule-based readings of price and volume.
+//  They are heuristics, not proof of institutional activity and not a prediction.
+//
+//  Revision notes
+//   ┬╖ Dashboard is live on every tick. It no longer waits for a bar to close, and a new session
+//     (Europe, USA, Asia) shows on the dashboard from its very first bar.
+//   ┬╖ Macro levels (PDH/PDL, PWH/PWL, PMH/PML, DO/WO/MO, NY 00:00) can be drawn as a strip in the
+//     empty space to the right of the last candle, with a gap, so they never sit on top of candles.
+//   ┬╖ A session that is still building its range is shown as FORMING instead of DEAD.
+//   ┬╖ Flow oscillator guarded against zero volume; PDH/PDL/PWH/PWL alerts no longer fire when the level rolls over.
+//ΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöüΓöü
+indicator("Arpan's Trading Sessions", shorttitle = "Trading Sessions", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 500)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// SETTINGS: SESSION BOXES
+// 1 ┬╖ INPUTS
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-show_sydney_box  = input.bool(true,  "Show Sydney Box", group="Session Boxes")
-show_tokyo_box   = input.bool(true,  "Show Tokyo Box", group="Session Boxes")
-show_china_box   = input.bool(true,  "Show Shanghai Box", group="Session Boxes")
-merge_asian_box  = input.bool(false, "Merge Asian Box (Syd+Tok+Sha)", group="Session Boxes")
-show_london_box  = input.bool(true,  "Show London Box", group="Session Boxes")
-show_usa_box     = input.bool(true,  "Show New York Box", group="Session Boxes")
+G_BOX = "Session Boxes"
+G_LIN = "Session Lines & Liquidity"
+G_MAC = "Macro Liquidity"
+G_BIA = "Bias / Intelligence"
+G_DSH = "Dashboard"
+G_KZ  = "Killzones & Overlap (NY time)"
+G_UI  = "UI & Aesthetics"
+G_ALR = "Alerts"
+G_ADV = "Advanced / Engine"
+
+// ΓöÇΓöÇ Session Boxes (session times are in each exchange's own timezone, DST handled automatically)
+show_syd = input.bool(true, "Sydney", inline = "syd", group = G_BOX)
+col_syd  = input.color(#00c853, "", inline = "syd", group = G_BOX)
+ses_syd  = input.session("1000-1600", "", inline = "syd", group = G_BOX)
+show_tok = input.bool(true, "Tokyo", inline = "tok", group = G_BOX)
+col_tok  = input.color(#e91e63, "", inline = "tok", group = G_BOX)
+ses_tok  = input.session("0900-1500", "", inline = "tok", group = G_BOX)
+show_sha = input.bool(true, "Shanghai", inline = "sha", group = G_BOX)
+col_sha  = input.color(#9c27b0, "", inline = "sha", group = G_BOX)
+ses_sha  = input.session("0930-1500", "", inline = "sha", group = G_BOX)
+show_eur = input.bool(true, "London", inline = "eur", group = G_BOX)
+col_eur  = input.color(#2157f3, "", inline = "eur", group = G_BOX)
+ses_eur  = input.session("0800-1630", "", inline = "eur", group = G_BOX)
+show_usa = input.bool(true, "New York", inline = "usa", group = G_BOX)
+col_usa  = input.color(#ff5d00, "", inline = "usa", group = G_BOX)
+ses_usa  = input.session("0930-1600", "", inline = "usa", group = G_BOX)
+merge_asia = input.bool(false, "Merge Asian box (Sydney + Tokyo + Shanghai)", group = G_BOX)
+skip_wknd  = input.bool(false, "Hide weekend sessions (24/7 crypto)", group = G_BOX)
+hist_n     = input.int(10, "Sessions kept on chart (per session)", minval = 1, maxval = 100, group = G_BOX, tooltip = "TradingView caps each drawing type at 500 objects. The script lowers this automatically when your settings would exceed the cap (a notice appears in the dashboard).")
+
+// ΓöÇΓöÇ Session Lines & Liquidity
+mid_all  = input.bool(true, "Midline", inline = "m1", group = G_LIN, tooltip = "First tick = master switch for all midlines. The next three ticks choose the region.")
+mid_asia = input.bool(true, "Asia", inline = "m1", group = G_LIN)
+mid_eur  = input.bool(true, "Europe", inline = "m1", group = G_LIN)
+mid_usa  = input.bool(true, "USA", inline = "m1", group = G_LIN)
+hl_all   = input.bool(true, "High/Low", inline = "h1", group = G_LIN, tooltip = "First tick = master switch for all session High/Low lines. The next three ticks choose the region.")
+hl_asia  = input.bool(true, "Asia", inline = "h1", group = G_LIN)
+hl_eur   = input.bool(true, "Europe", inline = "h1", group = G_LIN)
+hl_usa   = input.bool(true, "USA", inline = "h1", group = G_LIN)
+px_mid   = input.bool(true, "Midline price", inline = "px1", group = G_LIN)
+px_hl    = input.bool(true, "H/L price", inline = "px1", group = G_LIN)
+mid_style_s = input.string("Dashed", "Midline style", options = ["Solid", "Dashed", "Dotted"], inline = "ms1", group = G_LIN)
+mid_w       = input.int(1, "Width", minval = 1, maxval = 4, inline = "ms1", group = G_LIN)
+hl_style_s  = input.string("Solid", "H/L style", options = ["Solid", "Dashed", "Dotted"], inline = "hs1", group = G_LIN)
+hl_w        = input.int(1, "Width", minval = 1, maxval = 4, inline = "hs1", group = G_LIN)
+ext_mode    = input.string("Until swept", "Carry forward previous H/L", options = ["Until swept", "Until next session", "None"], group = G_LIN, tooltip = "Until swept = liquidity pools stay on the chart until the sweep definition below is met.\nUntil next session = line is cut when the same session starts again.\nNone = no carry forward (line ends with the session).")
+show_sweep_mk = input.bool(true, "Mark swept levels with ├ù", group = G_LIN)
+ref_mode    = input.string("Previous Macro Session", "Liquidity reference", options = ["Previous Macro Session", "Previous Same Session", "Both"], group = G_LIN, tooltip = "Reference H/L a session is judged against.\nPrevious Macro Session: Europe uses Asia, USA uses Europe (Europe's H/L so far if it is still running), Asia uses USA.\nPrevious Same Session: the last completed session of the same type.\nBoth: the outer envelope of the two (highest high / lowest low).\nReferences are frozen when the session starts and never use the session's own developing H/L.")
+sweep_def   = input.string("Wick Through", "Sweep definition", options = ["Wick Through", "Close Through", "Wick + Rejection", "Wick + Close Back Inside"], group = G_LIN, tooltip = "Wick Through: high/low trades beyond the level.\nClose Through: a bar closes beyond the level.\nWick + Rejection: wick beyond the level and the rejection wick is at least the % below of that bar's range.\nWick + Close Back Inside: wick beyond the level and a bar closes back inside within the max bars below.")
+sweep_dist  = input.int(0, "Min sweep distance (ticks)", minval = 0, group = G_LIN, tooltip = "Price must trade (or close) this many ticks beyond a level before it counts.")
+rej_pct     = input.int(50, "Min rejection (% of bar range)", minval = 10, maxval = 100, group = G_LIN, tooltip = "Used by 'Wick + Rejection'.")
+rej_bars    = input.int(3, "Max bars to confirm rejection", minval = 1, maxval = 20, group = G_LIN, tooltip = "Used by 'Wick + Close Back Inside'. 1 = the same bar must close back inside.")
+acc_on      = input.bool(false, "Breakout acceptance", inline = "acc1", group = G_LIN, tooltip = "Tracks whether a close beyond the reference level is accepted (holds) or fails. Adds BRK ACCEPTED / BRK FAILED / RETEST to the liquidity column.")
+acc_bars    = input.int(3, "Bars", minval = 1, maxval = 20, inline = "acc1", group = G_LIN, tooltip = "Consecutive closes beyond the level needed for acceptance.")
+acc_min     = input.int(0, "Min close beyond level (ticks)", minval = 0, group = G_LIN)
+acc_retest  = input.bool(false, "Retest required before acceptance", group = G_LIN, tooltip = "A bar must pull back to the level and still close beyond it before the breakout is accepted.")
+
+// ΓöÇΓöÇ Macro Liquidity
+show_pd = input.bool(true, "Previous Day H/L", inline = "pd", group = G_MAC)
+col_pd  = input.color(#9e9e9e, "", inline = "pd", group = G_MAC)
+show_pw = input.bool(true, "Previous Week H/L", inline = "pw", group = G_MAC)
+col_pw  = input.color(#cfd8dc, "", inline = "pw", group = G_MAC)
+show_pm = input.bool(false, "Previous Month H/L", inline = "pm", group = G_MAC)
+col_pm  = input.color(#ffd54f, "", inline = "pm", group = G_MAC)
+show_do = input.bool(true, "Daily Open", inline = "do", group = G_MAC)
+col_do  = input.color(#26c6da, "", inline = "do", group = G_MAC)
+show_wo = input.bool(false, "Weekly Open", inline = "wo", group = G_MAC)
+col_wo  = input.color(#ab47bc, "", inline = "wo", group = G_MAC)
+show_mo = input.bool(false, "Monthly Open", inline = "mo", group = G_MAC)
+col_mo  = input.color(#8d6e63, "", inline = "mo", group = G_MAC)
+show_no = input.bool(true, "USA Midnight Open (00:00 NY)", inline = "no", group = G_MAC)
+col_no  = input.color(#ffeb3b, "", inline = "no", group = G_MAC)
+mac_style_s = input.string("Per level", "Line style", options = ["Per level", "Solid", "Dashed", "Dotted"], inline = "mst", group = G_MAC, tooltip = "Per level keeps the original look: dashed previous-day, solid weekly/monthly, dotted opens.")
+lvl_w       = input.int(1, "Width", minval = 1, maxval = 4, inline = "mst", group = G_MAC)
+show_mlbl   = input.bool(true, "Labels", inline = "mlb", group = G_MAC)
+lbl_off     = input.int(2, "Offset (bars, full-line layout only)", minval = 0, maxval = 50, inline = "mlb", group = G_MAC)
+lvl_layout  = input.string("Right strip (gap after last candle)", "Layout", options = ["Right strip (gap after last candle)", "Full line from period start"], group = G_MAC, tooltip = "Right strip: every macro level starts a few bars after the newest (live) candle and runs to the price axis, so it never overlaps the running candle or earlier candles. Scroll the chart left (more empty space on the right) to see it.\nFull line: the original look, a line from the start of the period running through the chart.")
+lvl_gap     = input.int(20, "Gap after last candle (bars)", minval = 0, maxval = 100, inline = "lg1", group = G_MAC, tooltip = "Empty bars between the live candle and the start of the level lines. Right-strip layout only.")
+lvl_len     = input.int(80, "Strip length (bars)", minval = 2, maxval = 400, inline = "lg1", group = G_MAC, tooltip = "Only used when 'Keep lines going to the price axis' is off: how far the level lines run into the empty space. TradingView allows drawings at most 500 bars into the future, so gap + length can never exceed 500. Right-strip layout only.")
+lvl_ext     = input.bool(true, "Keep lines going to the price axis", group = G_MAC, tooltip = "On: each line starts after the gap and runs on to the price axis, however far you scroll right (the reference look). Off: the line stops after the strip length.")
+lvl_lbl_pos = input.string("Fixed offset", "Label position (strip)", options = ["Fixed offset", "Line start", "Line end"], inline = "lp", group = G_MAC, tooltip = "Fixed offset: label sits a set number of bars after the live candle, just above its line.\nLine start: label sits just above the first point of the line.\nLine end: label sits after the last point of the line (needs a finite strip; you must scroll right to see it).")
+lvl_lbl_gap = input.int(40, "Offset (bars)", minval = 0, maxval = 300, inline = "lp", group = G_MAC, tooltip = "Fixed offset only: distance from the live candle to the label. It is never placed left of the line start.")
+
+// ΓöÇΓöÇ Bias / Intelligence
+range_bench = input.string("SMA", "Range benchmark", options = ["SMA", "EMA", "Median"], inline = "rb", group = G_BIA, tooltip = "Benchmark session range. Built only from PRIOR completed sessions, never from the session being classified.")
+range_len   = input.int(12, "Lookback (sessions)", minval = 3, maxval = 30, inline = "rb", group = G_BIA)
+adr_len     = input.int(14, "ADR length (days)", minval = 2, maxval = 60, group = G_BIA)
+thr_dead    = input.float(0.40, "DEAD if range / benchmark below", minval = 0.05, maxval = 1.0, step = 0.05, group = G_BIA)
+thr_tight   = input.float(0.50, "TIGHT range ratio below", minval = 0.1, maxval = 2.0, step = 0.05, group = G_BIA)
+thr_large   = input.float(1.00, "LARGE range ratio from", minval = 0.5, maxval = 3.0, step = 0.05, group = G_BIA)
+thr_xtrm    = input.float(1.30, "EXTREME range ratio from", minval = 0.5, maxval = 4.0, step = 0.05, group = G_BIA)
+thr_bal     = input.float(0.40, "Balanced if body / range below", minval = 0.1, maxval = 0.9, step = 0.05, group = G_BIA)
+thr_body    = input.float(0.50, "Directional if body / range from", minval = 0.1, maxval = 1.0, step = 0.05, group = G_BIA)
+thr_clv     = input.float(0.65, "Close-location conviction (0-1)", minval = 0.5, maxval = 1.0, step = 0.05, group = G_BIA)
+thr_flow    = input.float(0.05, "Money-flow threshold (+/-)", minval = 0.0, maxval = 0.5, step = 0.01, group = G_BIA)
+atr_on   = input.bool(true, "ATR bar volatility", inline = "atr1", group = G_BIA, tooltip = "Per-bar range / ATR, averaged over each session (BAR VOL column). This is bar volatility, separate from session range vs. its own history.")
+atr_len  = input.int(14, "Length", minval = 2, maxval = 100, inline = "atr1", group = G_BIA)
+atr_dead = input.float(0.50, "Dead <", minval = 0.05, maxval = 2.0, step = 0.05, inline = "atr2", group = G_BIA, tooltip = "Thresholds apply to the session's AVERAGE bar range / ATR. A session below 'Dead' is also classed DEAD.")
+atr_high = input.float(1.15, "High >=", minval = 0.5, maxval = 4.0, step = 0.05, inline = "atr2", group = G_BIA)
+atr_xt   = input.float(1.50, "Extreme >=", minval = 0.5, maxval = 6.0, step = 0.05, inline = "atr2", group = G_BIA)
+adl_on   = input.bool(false, "ADL momentum", inline = "adl1", group = G_BIA, tooltip = "Fast vs. slow average of the accumulation/distribution line. A volume/price-flow heuristic, not proof of anything.")
+adl_fast = input.int(9, "Fast", minval = 2, maxval = 100, inline = "adl1", group = G_BIA)
+adl_slow = input.int(15, "Slow", minval = 3, maxval = 200, inline = "adl1", group = G_BIA)
+div_on   = input.bool(false, "Flow divergence", inline = "dv1", group = G_BIA, tooltip = "Price makes a new extreme while money flow (Chaikin-style) fails to confirm.")
+div_lb   = input.int(20, "Lookback", minval = 5, maxval = 100, inline = "dv1", group = G_BIA, tooltip = "Max bars between the two price extremes. Pivot strength is lookback / 5 (min 2).")
+div_mag  = input.float(0.05, "Min magnitude", minval = 0.0, maxval = 1.0, step = 0.01, inline = "dv2", group = G_BIA, tooltip = "Minimum flow difference (flow is bounded -1..+1).")
+div_piv  = input.bool(true, "Confirmed pivots", inline = "dv2", group = G_BIA, tooltip = "ON: compares confirmed swing pivots (signal arrives pivot-strength bars late, never repaints).\nOFF: compares the bar to the rolling extreme of the lookback.")
+div_conf = input.string("Bar Close", "Divergence confirmation", options = ["Intrabar", "Bar Close"], group = G_BIA)
+disp_on   = input.bool(false, "Displacement filter", group = G_BIA, tooltip = "A displacement bar has a large body relative to its range AND a large range relative to ATR.")
+disp_body = input.float(0.70, "Body / range >=", minval = 0.3, maxval = 1.0, step = 0.05, inline = "dp2", group = G_BIA)
+disp_atr  = input.float(1.20, "Range / ATR >=", minval = 0.3, maxval = 5.0, step = 0.05, inline = "dp2", group = G_BIA)
+disp_ref  = input.bool(false, "Displacement must close beyond the reference level", group = G_BIA)
+str_on    = input.bool(true, "Structure trend", inline = "ss1", group = G_BIA, tooltip = "Persistent HH/HL (or LH/LL) bar runs inside the lookback, not a single candle.")
+str_lb    = input.int(20, "Lookback bars", minval = 5, maxval = 100, inline = "ss1", group = G_BIA)
+str_up    = input.int(3, "Min HH/HL bars", minval = 1, maxval = 20, inline = "ss2", group = G_BIA)
+str_dn    = input.int(3, "Min LH/LL bars", minval = 1, maxval = 20, inline = "ss2", group = G_BIA)
+str_ma_on = input.bool(false, "MA filter", inline = "ss3", group = G_BIA)
+str_ma_t  = input.string("EMA", "", options = ["SMA", "EMA"], inline = "ss3", group = G_BIA)
+str_ma_n  = input.int(50, "Length", minval = 2, maxval = 400, inline = "ss3", group = G_BIA)
+req_flow = input.bool(true, "Expansion requires flow", group = G_BIA, tooltip = "Confirmations below only count when their layer is enabled.")
+req_adl  = input.bool(false, "Expansion requires ADL agreement", group = G_BIA)
+req_disp = input.bool(false, "Expansion requires displacement", group = G_BIA)
+req_atr  = input.bool(false, "Expansion requires a high-volatility bar", group = G_BIA)
+req_div  = input.bool(false, "Expansion requires no opposing divergence", group = G_BIA)
+req_acc  = input.bool(false, "Expansion requires an accepted breakout", group = G_BIA)
+req_str  = input.bool(true, "Trend phases require structure", group = G_BIA)
+
+// ΓöÇΓöÇ Dashboard
+show_dash   = input.bool(true, "Show smart range dashboard", group = G_DSH)
+dash_detail = input.string("Standard", "Detail level", options = ["Compact", "Standard", "Advanced"], group = G_DSH, tooltip = "Compact: SESSION / PHASE / LIQUIDITY / BIAS\nStandard: + RANGE / % ADR\nAdvanced: + BAR VOL / FLOW / STRUCTURE")
+dash_pos_s  = input.string("Top Right", "Position", options = ["Top Left", "Top Center", "Top Right", "Middle Left", "Middle Right", "Bottom Left", "Bottom Center", "Bottom Right"], group = G_DSH)
+dash_size_s = input.string("Small", "Text size", options = ["Tiny", "Small", "Normal"], group = G_DSH)
+dash_theme  = input.string("Dark", "Theme", options = ["Dark", "Light", "Auto (chart)"], group = G_DSH)
+
+// ΓöÇΓöÇ Killzones & Overlap (evaluated in New York time)
+show_ovl = input.bool(false, "Highlight Europe x USA overlap", inline = "ovl", group = G_KZ)
+col_ovl  = input.color(#ffd600, "", inline = "ovl", group = G_KZ)
+show_kz1 = input.bool(false, "Asia KZ", inline = "k1", group = G_KZ)
+col_kz1  = input.color(#e91e63, "", inline = "k1", group = G_KZ)
+ses_kz1  = input.session("2000-2359", "", inline = "k1", group = G_KZ)
+show_kz2 = input.bool(false, "Europe KZ", inline = "k2", group = G_KZ)
+col_kz2  = input.color(#2157f3, "", inline = "k2", group = G_KZ)
+ses_kz2  = input.session("0200-0500", "", inline = "k2", group = G_KZ)
+show_kz3 = input.bool(false, "USA AM KZ", inline = "k3", group = G_KZ)
+col_kz3  = input.color(#ff5d00, "", inline = "k3", group = G_KZ)
+ses_kz3  = input.session("0700-1000", "", inline = "k3", group = G_KZ)
+show_kz4 = input.bool(false, "Europe Close KZ", inline = "k4", group = G_KZ)
+col_kz4  = input.color(#00c853, "", inline = "k4", group = G_KZ)
+ses_kz4  = input.session("1000-1200", "", inline = "k4", group = G_KZ)
+
+// ΓöÇΓöÇ UI & Aesthetics
+name_mode      = input.string("City (London / New York)", "Session naming", options = ["Region (Europe / USA)", "City (London / New York)"], group = G_UI, tooltip = "Names used in the dashboard, box tags, price labels and phase labels. Session times are unchanged.")
+bg_tr          = input.int(88, "Box fill transparency", minval = 0, maxval = 100, group = G_UI)
+show_border    = input.bool(true, "Box borders", inline = "bd1", group = G_UI)
+border_w       = input.int(1, "Width", minval = 1, maxval = 4, inline = "bd1", group = G_UI)
+border_style_s = input.string("Solid", "Border style", options = ["Solid", "Dashed", "Dotted"], group = G_UI)
+show_tag       = input.bool(true, "Session labels", inline = "tg1", group = G_UI)
+tag_stats      = input.bool(true, "Range stats in label", inline = "tg1", group = G_UI)
+lbl_size_s     = input.string("Small", "Session label size", options = ["Tiny", "Small", "Normal"], group = G_UI)
+px_size_s      = input.string("Small", "Price label size", options = ["Tiny", "Small", "Normal"], group = G_UI)
+show_bias_lbl  = input.bool(true, "Historical phase labels", inline = "bl1", group = G_UI)
+bias_size_s    = input.string("Tiny", "Size", options = ["Tiny", "Small", "Normal"], inline = "bl1", group = G_UI)
+col_bull    = input.color(#00e676, "Bullish", inline = "c1", group = G_UI)
+col_bear    = input.color(#ff5252, "Bearish", inline = "c1", group = G_UI)
+col_info    = input.color(#448aff, "Expansion", inline = "c2", group = G_UI)
+col_warn    = input.color(#ffab40, "Warning", inline = "c2", group = G_UI)
+col_neutral = input.color(#9e9e9e, "Neutral", inline = "c3", group = G_UI)
+
+// ΓöÇΓöÇ Alerts (the new event alerts are sent through alert(): create the alert with condition "Any alert() function call")
+alert_mode = input.string("Bar Close", "Alert mode", options = ["Intrabar", "Bar Close"], group = G_ALR, tooltip = "Bar Close = price-based alerts only fire once the bar has closed. Session open/close alerts are time based and always fire on time.")
+al_phase = input.bool(false, "Phase change", inline = "al1", group = G_ALR)
+al_manip = input.bool(false, "Manipulation up/down", inline = "al1", group = G_ALR)
+al_exp   = input.bool(false, "Expansion up/down", inline = "al2", group = G_ALR)
+al_sweep = input.bool(false, "High / low / both sweep", inline = "al2", group = G_ALR)
+al_acc   = input.bool(false, "Breakout accepted / failed", inline = "al3", group = G_ALR)
+al_rng   = input.bool(false, "Session range EXTREME", inline = "al3", group = G_ALR)
+al_adr   = input.bool(false, "ADR threshold reached", inline = "al4", group = G_ALR)
+adr_thr  = input.int(100, "ADR %", minval = 10, maxval = 300, inline = "al4", group = G_ALR, tooltip = "Session range as % of ADR that triggers the ADR alert.")
+
+// ΓöÇΓöÇ Advanced / Engine
+sig_mode  = input.string("Intrabar", "Drawing update", options = ["Intrabar", "Bar Close"], group = G_ADV, tooltip = "Controls when session boxes, lines and labels are drawn and updated.\nIntrabar = they follow the forming bar immediately.\nBar Close = they only change when a bar closes.\nThe dashboard and the session state are ALWAYS live on every tick, whatever you choose here.")
+flow_mode = input.string("Auto", "Flow data mode", options = ["Auto", "Real Volume", "Tick Volume", "Price Only"], group = G_ADV, tooltip = "Auto uses whatever volume the feed has. Real Volume refuses forex/CFD/index volume (tick counts) and falls back to price-only. Tick Volume labels the volume as tick volume. Price Only ignores volume. The active mode is shown in the dashboard. Volume type is detected from the symbol type, so treat it as a heuristic.")
+min_hist  = input.int(3, "Min historical sessions required", minval = 1, maxval = 30, group = G_ADV, tooltip = "Before this many completed sessions exist the phase shows WARM-UP instead of a weak classification.")
+ign_part  = input.bool(true, "Ignore incomplete (partial) sessions", group = G_ADV, tooltip = "A session already running on the first loaded bar is incomplete.")
+min_bars  = input.int(3, "Min bars per session", minval = 1, maxval = 100, group = G_ADV)
+min_q     = input.int(50, "Min data quality (%)", minval = 0, maxval = 100, group = G_ADV, tooltip = "Session bar count vs. the median of previous sessions. Below this the session is ignored (N/A). 0 = off.")
+tf_sel    = input.string("All supported", "Enable on", options = ["All supported", "1m-5m", "5m-15m", "15m-1H", "1H-4H"], group = G_ADV)
+debug_on  = input.bool(false, "Debug mode", group = G_ADV, tooltip = "Shows a debug table (reference H/L, ratios, flow, sweep and acceptance state, failed confirmations) and start/end markers.")
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// SETTINGS: SESSION LINES
+// 2 ┬╖ CONSTANTS & DERIVED STYLE
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-show_asian_lines  = input.bool(true, "Show Asian Session Midline", group="Session Lines")
-show_london_lines = input.bool(true, "Show Europe Session Midline", group="Session Lines")
-show_usa_lines    = input.bool(true, "Show USA Session Midline", group="Session Lines")
+TZ_SYD = "Australia/Sydney"
+TZ_TOK = "Asia/Tokyo"
+TZ_SHA = "Asia/Shanghai"
+TZ_EUR = "Europe/London"
+TZ_USA = "America/New_York"
 
-show_asian_hl     = input.bool(true, "Show Asian Session High/Low", group="Session Lines")
-show_europe_hl    = input.bool(true, "Show Europe Session High/Low", group="Session Lines")
-show_usa_hl       = input.bool(true, "Show USA Session High/Low", group="Session Lines")
+f_style(string s) =>
+    s == "Dashed" ? line.style_dashed : s == "Dotted" ? line.style_dotted : line.style_solid
+
+f_size(string s) =>
+    s == "Tiny" ? size.tiny : s == "Normal" ? size.normal : size.small
+
+f_msty(string dflt) =>
+    mac_style_s == "Per level" ? dflt : f_style(mac_style_s)
+
+b_style   = f_style(border_style_s)
+mid_sty   = f_style(mid_style_s)
+hl_sty    = f_style(hl_style_s)
+tag_size  = f_size(lbl_size_s)
+px_size   = f_size(px_size_s)
+bias_size = f_size(bias_size_s)
+dash_tsz  = f_size(dash_size_s)
+dash_pos = dash_pos_s == "Top Left" ? position.top_left : dash_pos_s == "Top Center" ? position.top_center : dash_pos_s == "Top Right" ? position.top_right : dash_pos_s == "Middle Left" ? position.middle_left : dash_pos_s == "Middle Right" ? position.middle_right : dash_pos_s == "Bottom Left" ? position.bottom_left : dash_pos_s == "Bottom Center" ? position.bottom_center : position.bottom_right
+dash_hdr_bg = dash_theme == "Light" ? #e0e3eb : dash_theme == "Auto (chart)" ? color.new(chart.fg_color, 85) : #000000
+dash_row_bg = dash_theme == "Light" ? #ffffff : dash_theme == "Auto (chart)" ? chart.bg_color : #1e222d
+dash_txt    = dash_theme == "Light" ? #131722 : dash_theme == "Auto (chart)" ? chart.fg_color : #d1d4dc
+
+// Macro level layout
+bool lvl_strip = lvl_layout == "Right strip (gap after last candle)"
+
+// Session naming: Europe / USA by default, London / New York optional
+bool   nm_city = name_mode == "City (London / New York)"
+// Dashboard, midlines, H/L lines, price labels and alerts always use Asia / Europe / USA.
+string nm_eur  = "Europe"
+string nm_usa  = "USA"
+string pf_eur  = "EU"
+string pf_usa  = "US"
+// Only the box tag follows the naming setting.
+string bx_eur  = nm_city ? "London" : "Europe"
+string bx_usa  = nm_city ? "New York" : "USA"
+
+// Effective per-region line toggles (master AND region)
+bool e_mid_asia = mid_all and mid_asia
+bool e_mid_eur  = mid_all and mid_eur
+bool e_mid_usa  = mid_all and mid_usa
+bool e_hl_asia  = hl_all and hl_asia
+bool e_hl_eur   = hl_all and hl_eur
+bool e_hl_usa   = hl_all and hl_usa
+
+// Timeframe gate
+int tf_secs = timeframe.in_seconds()
+bool tf_sel_ok = switch tf_sel
+    "1m-5m"  => tf_secs >= 60 and tf_secs <= 300
+    "5m-15m" => tf_secs >= 300 and tf_secs <= 900
+    "15m-1H" => tf_secs >= 900 and tf_secs <= 3600
+    "1H-4H"  => tf_secs >= 3600 and tf_secs <= 14400
+    => tf_secs <= 14400
+bool tf_ok     = timeframe.isintraday and tf_sel_ok
+bool tf_coarse = tf_secs > 3600
+string tf_msg  = not timeframe.isintraday ? "Sessions need an intraday chart (4H or lower)" : "Disabled on this timeframe (Enable on: " + tf_sel + ")"
+
+// Drawing budget: TradingView allows 500 boxes, 500 lines and 500 labels. The tightest one decides how many sessions fit.
+int n_mid = (e_mid_asia ? 1 : 0) + (e_mid_eur ? 1 : 0) + (e_mid_usa ? 1 : 0)
+int n_hl  = (e_hl_asia ? 1 : 0) + (e_hl_eur ? 1 : 0) + (e_hl_usa ? 1 : 0)
+int n_box = (merge_asia ? ((show_syd or show_tok or show_sha) ? 1 : 0) : (show_syd ? 1 : 0) + (show_tok ? 1 : 0) + (show_sha ? 1 : 0)) + (show_eur ? 1 : 0) + (show_usa ? 1 : 0)
+int box_per_hist = math.max(1, n_box)
+int lin_per_hist = math.max(1, n_mid + 2 * n_hl)
+int lbl_per_hist = math.max(1, (show_tag ? n_box : 0) + (px_mid ? n_mid : 0) + (px_hl ? 2 * n_hl : 0) + (show_bias_lbl ? 3 : 0) + (show_sweep_mk ? 2 * n_hl : 0))
+int hist_eff = math.max(1, math.min(hist_n, math.min(int(math.floor(490.0 / box_per_hist)), math.min(int(math.floor(485.0 / lin_per_hist)), int(math.floor(485.0 / lbl_per_hist))))))
+bool hist_clamped = hist_eff < hist_n
+int hist_need = math.min(min_hist, range_len)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SETTINGS: MACRO LIQUIDITY
