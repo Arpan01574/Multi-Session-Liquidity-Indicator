@@ -671,92 +671,486 @@ f_lat(Track t, bool want_hi) =>
     r
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✅ GLOBAL VARIABLES FOR BIAS ENGINE
+// 8 · LIQUIDITY STATE MACHINE
+//   Level states: INSIDE → TOUCHED → SWEPT (per definition) → TRAP (rejected) | BREAKOUT → ACCEPTED | FAILED (+RETEST)
+//   Line lifecycle: CREATED (live) → EXTENDED (life 1) → SWEPT / NEXT-SESSION CUTOFF → STOPPED (life 2)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-atr_val = ta.atr(14)
-bar_range = high - low
-avg_range = ta.sma(bar_range, 20)
-sma_close = ta.sma(close, 20)
+// true on the bar where liquidity at `lvl` is taken, according to the sweep definition
+f_sweep_hit(Side sd, float lvl, bool up) =>
+    float d    = up ? 1.0 : -1.0
+    float dist = sweep_dist * syminfo.mintick
+    float ex_w = ((up ? high : low) - lvl) * d
+    float ex_c = (close - lvl) * d
+    float rj   = (up ? high - close : close - low) / math.max(high - low, syminfo.mintick)
+    bool  wick = ex_w > dist
+    bool  hit  = false
+    if sweep_def == "Wick Through"
+        hit := wick
+    else if sweep_def == "Close Through"
+        hit := ex_c > dist
+    else if sweep_def == "Wick + Rejection"
+        hit := wick and rj >= rej_pct / 100.0
+    else
+        if sd.arm_bar == -2 and ex_c <= 0
+            sd.arm_bar := -1
+        if wick and sd.arm_bar == -1
+            sd.arm_bar := bar_index
+        if sd.arm_bar >= 0
+            if ex_c <= 0
+                hit := true
+            else if bar_index - sd.arm_bar >= rej_bars - 1
+                sd.arm_bar := -2
+    hit
+
+// breakout acceptance: a close beyond the level is accepted (holds) or fails (closes back inside)
+f_brk_step(Side sd, float lvl, bool up, string who) =>
+    float d      = up ? 1.0 : -1.0
+    float exc    = (close - lvl) * d
+    bool  beyond = exc > acc_min * syminfo.mintick
+    bool  inside = exc <= 0
+    float tol    = 0.1 * nz(atr_v)
+    bool  rt_bar = ((up ? low : high) - lvl) * d <= tol
+    int   prev   = sd.brk
+    if sd.brk == 0 or sd.brk == 3
+        if beyond
+            sd.brk := 1
+            sd.n_beyond := 1
+            sd.retested := false
+    else if sd.brk == 1
+        if inside
+            sd.brk := 3
+        else if beyond
+            sd.n_beyond := sd.n_beyond + 1
+            if rt_bar and sd.n_beyond > 1
+                sd.retested := true
+    else if sd.brk == 2
+        if inside
+            sd.brk := 3
+    if sd.brk == 1 and sd.n_beyond >= acc_bars and (not acc_retest or sd.retested)
+        sd.brk := 2
+    if sd.brk != prev and al_acc
+        if sd.brk == 2
+            f_ev(who, "Breakout ACCEPTED " + (up ? "above reference high " : "below reference low ") + str.tostring(lvl, format.mintick))
+        if sd.brk == 3
+            f_ev(who, "Breakout FAILED " + (up ? "above reference high " : "below reference low ") + str.tostring(lvl, format.mintick))
+    true
+
+// one bar of interaction between a live session and its (frozen) reference H/L
+f_ref_step(Sess s) =>
+    if not na(s.ref_hi) and not na(s.ref_lo)
+        Side h = s.rh
+        Side l = s.rl
+        bool was_h = h.swept
+        bool was_l = l.swept
+        if not h.swept
+            if f_sweep_hit(h, s.ref_hi, true)
+                h.swept := true
+        if not l.swept
+            if f_sweep_hit(l, s.ref_lo, false)
+                l.swept := true
+        if high >= s.ref_hi
+            h.touched := true
+        if low <= s.ref_lo
+            l.touched := true
+        if acc_on
+            f_brk_step(h, s.ref_hi, true, s.nm)
+            f_brk_step(l, s.ref_lo, false, s.nm)
+        bool new_h = h.swept and not was_h
+        bool new_l = l.swept and not was_l
+        if al_sweep and (new_h or new_l)
+            if h.swept and l.swept
+                f_ev(s.nm, "Both-side sweep (reference high and low taken)")
+            else if new_h
+                f_ev(s.nm, "High sweep (reference high " + str.tostring(s.ref_hi, format.mintick) + ")")
+            else
+                f_ev(s.nm, "Low sweep (reference low " + str.tostring(s.ref_lo, format.mintick) + ")")
+    true
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ✅ STORE LAST SESSION STATES
+// 9 · SESSION METRICS + PHASE CLASSIFIER
+//   Both read the session's STORED values only. Reference H/L live in ref_hi / ref_lo, never in hi / lo.
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Asian
-var string a_last_phase = "—"
-var color  a_last_pcol  = color.gray
-var string a_last_liq   = "—"
-var color  a_last_lcol  = color.gray
-var string a_last_vol   = "—"
-var color  a_last_vcol  = color.gray
-var string a_last_rng   = "—"
-var color  a_last_rcol  = color.gray
+f_calc(Sess s) =>
+    float rr   = s.hi - s.lo
+    float rr_s = math.max(rr, syminfo.mintick)
+    s.rng    := rr
+    s.rt     := (not na(s.avg) and s.avg > 0) ? rr / s.avg : na
+    s.body_r := math.abs(s.px_c - s.px_o) / rr_s
+    s.clv    := (s.px_c - s.lo) / rr_s
+    s.dirn   := s.px_c > s.px_o ? 1 : s.px_c < s.px_o ? -1 : 0
+    s.flow   := s.vsum > 0 ? s.mfv / s.vsum : 0.0
+    s.adr_u  := (not na(s.adr) and s.adr > 0) ? rr / s.adr : na
+    s.atr_rt := s.atr_n > 0 ? s.atr_sum / s.atr_n : na
+    true
 
-// Europe
-var string e_last_phase = "—"
-var color  e_last_pcol  = color.gray
-var string e_last_liq   = "—"
-var color  e_last_lcol  = color.gray
-var string e_last_vol   = "—"
-var color  e_last_vcol  = color.gray
-var string e_last_rng   = "—"
-var color  e_last_rcol  = color.gray
+// phase hierarchy: DEAD > MANIPULATION > EXPANSION > DISTRIBUTION > ACCUMULATION > TREND > CONSOLIDATION
+// A live session whose range is still building cannot be called DEAD (it shows FORMING instead of CONSOLIDATION).
+f_classify(Sess s) =>
+    string ph  = "CONSOLIDATION"
+    color  pc  = col_neutral
+    int    bd  = 0
+    string why = ""
+    if na(s.avg)
+        ph := "WARM-UP"
+    else
+        float rt      = na(s.rt) ? 1.0 : s.rt
+        bool  has_ref = not na(s.ref_hi) and not na(s.ref_lo)
+        Side  rh      = s.rh
+        Side  rl      = s.rl
+        bool  sw_h    = has_ref and rh.swept
+        bool  sw_l    = has_ref and rl.swept
+        bool  trap_h  = sw_h and s.px_c < s.ref_hi and s.clv < 0.5
+        bool  trap_l  = sw_l and s.px_c > s.ref_lo and s.clv > 0.5
+        bool  brk_up  = has_ref and s.px_c > s.ref_hi and s.body_r >= thr_body and s.clv >= thr_clv
+        bool  brk_dn  = has_ref and s.px_c < s.ref_lo and s.body_r >= thr_body and s.clv <= 1.0 - thr_clv
+        bool  f_bull  = s.flow > thr_flow
+        bool  f_bear  = s.flow < -thr_flow
+        bool  balanced = s.body_r < thr_bal
+        bool  forming  = s.live and (s.nbars < 2 or (not na(s.exp_n) and s.nbars < 0.25 * s.exp_n))
+        // optional confirmations: each only counts when its layer is enabled AND set to required
+        bool ok_flow_up = not req_flow or f_bull
+        bool ok_flow_dn = not req_flow or f_bear
+        bool ok_adl_up  = not (adl_on and req_adl) or s.adl_dir > 0
+        bool ok_adl_dn  = not (adl_on and req_adl) or s.adl_dir < 0
+        bool ok_disp_up = not (disp_on and req_disp) or s.disp_up
+        bool ok_disp_dn = not (disp_on and req_disp) or s.disp_dn
+        bool ok_atr     = not (atr_on and req_atr) or s.atr_pk >= atr_high
+        bool ok_div_up  = not (div_on and req_div) or not s.div_bear
+        bool ok_div_dn  = not (div_on and req_div) or not s.div_bull
+        bool ok_acc_up  = not (acc_on and req_acc) or rh.brk == 2
+        bool ok_acc_dn  = not (acc_on and req_acc) or rl.brk == 2
+        bool ok_str_up  = not (str_on and req_str) or s.str_dir > 0
+        bool ok_str_dn  = not (str_on and req_str) or s.str_dir < 0
+        bool dead = not forming and (rt < thr_dead or (atr_on and not na(s.atr_rt) and s.atr_rt < atr_dead))
+        if dead
+            ph := "DEAD"
+        else if trap_h and (f_bear or s.clv < 0.3)
+            ph := "MANIPULATION ↓"
+            pc := col_bear
+            bd := -1
+        else if trap_l and (f_bull or s.clv > 0.7)
+            ph := "MANIPULATION ↑"
+            pc := col_bull
+            bd := 1
+        else if brk_up and ok_flow_up and ok_adl_up and ok_disp_up and ok_atr and ok_div_up and ok_acc_up
+            ph := "EXPANSION ↑"
+            pc := col_info
+            bd := 1
+        else if brk_dn and ok_flow_dn and ok_adl_dn and ok_disp_dn and ok_atr and ok_div_dn and ok_acc_dn
+            ph := "EXPANSION ↓"
+            pc := col_info
+            bd := -1
+        else if balanced and rt >= thr_large and f_bear
+            ph := "DISTRIBUTION"
+            pc := col_warn
+            bd := -1
+        else if balanced and rt < thr_large and f_bull
+            ph := "ACCUMULATION"
+            pc := col_bull
+            bd := 1
+        else if s.body_r >= thr_body and s.dirn > 0 and s.clv >= thr_clv and ok_str_up
+            ph := "BULL TREND"
+            pc := col_bull
+            bd := 1
+        else if s.body_r >= thr_body and s.dirn < 0 and s.clv <= 1.0 - thr_clv and ok_str_dn
+            ph := "BEAR TREND"
+            pc := col_bear
+            bd := -1
+        if forming and ph == "CONSOLIDATION"
+            ph := "FORMING"
+        // confirmation failures (debug): a breakout was present but a required filter said no
+        if (brk_up or brk_dn) and ph != "EXPANSION ↑" and ph != "EXPANSION ↓"
+            bool u = brk_up
+            string w = ""
+            if not (u ? ok_flow_up : ok_flow_dn)
+                w := w + "flow "
+            if not (u ? ok_adl_up : ok_adl_dn)
+                w := w + "adl "
+            if not (u ? ok_disp_up : ok_disp_dn)
+                w := w + "disp "
+            if not ok_atr
+                w := w + "atr "
+            if not (u ? ok_div_up : ok_div_dn)
+                w := w + "div "
+            if not (u ? ok_acc_up : ok_acc_dn)
+                w := w + "accept "
+            why := w
+    [ph, pc, bd, why]
 
-// USA
-var string u_last_phase = "—"
-var color  u_last_pcol  = color.gray
-var string u_last_liq   = "—"
-var color  u_last_lcol  = color.gray
-var string u_last_vol   = "—"
-var color  u_last_vcol  = color.gray
-var string u_last_rng   = "—"
-var color  u_last_rcol  = color.gray
+// liquidity column: deterministic hierarchy
+// ACCEPTED > FAILED > TRAP > RETEST > BREAKOUT > SWEPT H+L > SWEPT > TOUCHED > INSIDE
+f_liq(Sess s) =>
+    string tx = "—"
+    color  cl = col_neutral
+    if not na(s.ref_hi) and not na(s.ref_lo)
+        Side h = s.rh
+        Side l = s.rl
+        bool trap_h = h.swept and s.px_c < s.ref_hi and s.clv < 0.5
+        bool trap_l = l.swept and s.px_c > s.ref_lo and s.clv > 0.5
+        bool bo_up  = s.px_c > s.ref_hi
+        bool bo_dn  = s.px_c < s.ref_lo
+        tx := "INSIDE"
+        if h.brk == 2
+            tx := "BRK ↑ ACCEPTED"
+            cl := col_bull
+        else if l.brk == 2
+            tx := "BRK ↓ ACCEPTED"
+            cl := col_bear
+        else if h.brk == 3
+            tx := "BRK ↑ FAILED"
+            cl := col_bear
+        else if l.brk == 3
+            tx := "BRK ↓ FAILED"
+            cl := col_bull
+        else if trap_h
+            tx := "TRAP HIGH"
+            cl := col_bear
+        else if trap_l
+            tx := "TRAP LOW"
+            cl := col_bull
+        else if h.brk == 1 and h.retested
+            tx := "RETEST ↑"
+            cl := col_info
+        else if l.brk == 1 and l.retested
+            tx := "RETEST ↓"
+            cl := col_info
+        else if bo_up
+            tx := "BREAKOUT ↑"
+            cl := col_info
+        else if bo_dn
+            tx := "BREAKOUT ↓"
+            cl := col_info
+        else if h.swept and l.swept
+            tx := "SWEPT H+L"
+            cl := col_warn
+        else if h.swept
+            tx := "SWEPT HIGH"
+            cl := col_warn
+        else if l.swept
+            tx := "SWEPT LOW"
+            cl := col_warn
+        else if h.touched
+            tx := "HIGH TOUCHED"
+            cl := col_warn
+        else if l.touched
+            tx := "LOW TOUCHED"
+            cl := col_warn
+    [tx, cl]
+
+// phase-change style events (only queued in realtime, only when the matching alert is enabled)
+f_phase_ev(Sess s, string oldp, string newp) =>
+    if barstate.isrealtime and newp != oldp
+        if al_phase
+            f_ev(s.nm, "Phase change: " + oldp + " → " + newp)
+        if al_manip and newp == "MANIPULATION ↑"
+            f_ev(s.nm, "Bullish manipulation")
+        if al_manip and newp == "MANIPULATION ↓"
+            f_ev(s.nm, "Bearish manipulation")
+        if al_exp and newp == "EXPANSION ↑"
+            f_ev(s.nm, "Expansion up")
+        if al_exp and newp == "EXPANSION ↓"
+            f_ev(s.nm, "Expansion down")
+    true
+
+// developing classification of a live session (last bar only: dashboard + live alerts)
+f_live_eval(Sess s) =>
+    f_calc(s)
+    [ph, pc, bd, why] = f_classify(s)
+    [lq, lc] = f_liq(s)
+    f_phase_ev(s, s.ph_live, ph)
+    s.ph_live   := ph
+    s.phase     := ph
+    s.phase_col := pc
+    s.dir       := bd
+    s.liq       := lq
+    s.liq_col   := lc
+    s.why       := why
+    if al_rng and not s.rng_fired and not na(s.rt) and s.rt >= thr_xtrm
+        s.rng_fired := true
+        f_ev(s.nm, "Session range EXTREME (" + str.tostring(s.rt, "0.00") + "x benchmark)")
+    if al_adr and not s.adr_fired and not na(s.adr_u) and s.adr_u * 100 >= adr_thr
+        s.adr_fired := true
+        f_ev(s.nm, "ADR threshold reached (" + str.tostring(s.adr_u * 100, "#") + "% of ADR)")
+    true
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// COLORS
+// 10 · DRAWING ENGINE: CREATE ONCE, THEN UPDATE WITH SETTERS
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-c_sydney = #00c853
-c_asia   = #e91e63
-c_china  = #9c27b0
-c_europe = #2157f3
-c_usa    = #ff5d00
+
+f_bnm(Sess s) =>
+    s.nm == "Europe" ? bx_eur : s.nm == "USA" ? bx_usa : s.nm
+
+
+
+f_create(Sess s, bool box_on, bool mid_on, bool hl_on) =>
+    color bc = show_border ? s.col : color.new(s.col, 100)
+    if box_on
+        s.bx := box.new(s.t0, s.hi, s.t0, s.lo, xloc = xloc.bar_time, border_color = bc, border_style = b_style, border_width = border_w, bgcolor = color.new(s.col, bg_tr))
+        if show_tag
+            s.tag := label.new(s.t0, s.hi, f_bnm(s), xloc = xloc.bar_time, style = label.style_label_lower_left, color = s.col, textcolor = color.white, size = tag_size)
+    if mid_on
+        s.ln_mid := line.new(s.t0, s.px_o, s.t0, s.px_o, xloc = xloc.bar_time, color = color.new(s.col, 30), style = mid_sty, width = mid_w)
+        if px_mid
+            s.lb_mid := label.new(s.t0, s.px_o, "", xloc = xloc.bar_time, style = label.style_label_lower_left, color = color.new(s.col, 100), textcolor = s.col, size = px_size)
+    if hl_on
+        s.ln_h := line.new(s.t0, s.hi, s.t0, s.hi, xloc = xloc.bar_time, color = s.col, style = hl_sty, width = hl_w)
+        s.ln_l := line.new(s.t0, s.lo, s.t0, s.lo, xloc = xloc.bar_time, color = s.col, style = hl_sty, width = hl_w)
+        if px_hl
+            s.lb_h := label.new(s.t0, s.hi, "", xloc = xloc.bar_time, style = label.style_label_lower_right, color = color.new(s.col, 100), textcolor = s.col, size = px_size)
+            s.lb_l := label.new(s.t0, s.lo, "", xloc = xloc.bar_time, style = label.style_label_upper_right, color = color.new(s.col, 100), textcolor = s.col, size = px_size)
+    true
+
+f_update(Sess s, int right_t) =>
+    float rr  = s.hi - s.lo
+    float mid = (s.hi + s.lo) / 2
+    float rtt = (not na(s.avg) and s.avg > 0) ? rr / s.avg : na
+    f_box(s.bx, s.t0, s.hi, right_t, s.lo)
+    if not na(s.tag)
+        string tx = f_bnm(s)
+        if tag_stats
+            tx := tx + "  ·  " + f_rng(rr) + (na(rtt) ? "" : "  ·  " + str.tostring(rtt, "0.0") + "×")
+        label.set_xy(s.tag, s.t0, s.hi)
+        label.set_text(s.tag, tx)
+    f_ln(s.ln_mid, s.t0, mid, right_t)
+    f_lb(s.lb_mid, s.t0, mid, s.pfx + " EQ " + str.tostring(mid, format.mintick))
+    f_ln(s.ln_h, s.t0, s.hi, right_t)
+    f_ln(s.ln_l, s.t0, s.lo, right_t)
+    f_lb(s.lb_h, right_t, s.hi, s.pfx + " H " + str.tostring(s.hi, format.mintick))
+    f_lb(s.lb_l, right_t, s.lo, s.pfx + " L " + str.tostring(s.lo, format.mintick))
+    true
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// MACRO DATA FETCH (MOVED UP FOR SCOPE)
+// 11 · SESSION STATE ENGINE (start → live update → freeze → classify)
+//   The state advances on every tick, so the dashboard is always current.
+//   Only the drawing calls are gated by draw_step (Drawing update setting).
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-pdh = request.security(syminfo.tickerid, "D", high[1], lookahead = barmerge.lookahead_on)
-pdl = request.security(syminfo.tickerid, "D", low[1],  lookahead = barmerge.lookahead_on)
-pwh = request.security(syminfo.tickerid, "W", high[1], lookahead = barmerge.lookahead_on)
-pwl = request.security(syminfo.tickerid, "W", low[1],  lookahead = barmerge.lookahead_on)
+// one active bar added to a live session
+f_bar(Sess cs, bool stats_on) =>
+    cs.hi    := math.max(cs.hi, high)
+    cs.lo    := math.min(cs.lo, low)
+    cs.px_c  := close
+    cs.t1    := time
+    cs.nbars := cs.nbars + 1
+    cs.mfv   := cs.mfv + mfm * vol_eff
+    cs.vsum  := cs.vsum + vol_eff
+    cs.vol   := cs.vol + nz(volume)
+    if not na(bar_rt)
+        cs.atr_sum := cs.atr_sum + bar_rt
+        cs.atr_n   := cs.atr_n + 1
+        cs.atr_pk  := math.max(cs.atr_pk, bar_rt)
+    cs.adl_dir := adl_dir
+    cs.str_dir := str_dir
+    if stats_on
+        if disp_up_bar and (not disp_ref or (not na(cs.ref_hi) and close > cs.ref_hi))
+            cs.disp_up := true
+        if disp_dn_bar and (not disp_ref or (not na(cs.ref_lo) and close < cs.ref_lo))
+            cs.disp_dn := true
+        if div_bull_evt
+            cs.div_bull := true
+        if div_bear_evt
+            cs.div_bear := true
+        f_ref_step(cs)
+    true
 
-//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ENGINE 1: DRAW INDIVIDUAL BOXES 
-//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-draw_box(bool active, color base_col, string name) =>
-    var box b = na
-    var label lb = na
-    var float hi = na
-    var float lo = na
-    var int start_time = na
+f_step(Track t, bool active, bool st, bool en, bool box_on, bool mid_on, bool hl_on, bool stats_on, float m_hi, float m_lo) =>
+    // ── START: first bar inside the session
+    if st
+        Sess ns = Sess.new(nm = t.nm, pfx = t.pfx, col = t.col)
+        ns.t0      := time
+        ns.t1      := time
+        ns.px_o    := open
+        ns.px_c    := close
+        ns.hi      := high
+        ns.lo      := low
+        ns.adr     := adr
+        ns.partial := bar_index == 0
+        ns.rh      := Side.new()
+        ns.rl      := Side.new()
+        ns.oh      := Side.new()
+        ns.ol      := Side.new()
+        if stats_on
+            // benchmark = PRIOR completed sessions only; reference = frozen levels of OTHER sessions
+            ns.avg    := array.size(t.rngs) >= hist_need ? f_bench(t.rngs) : na
+            ns.exp_n  := array.size(t.nbs) >= 3 ? array.median(t.nbs) : na
+            ns.ref_hi := f_ref(m_hi, t.last_hi, true)
+            ns.ref_lo := f_ref(m_lo, t.last_lo, false)
+        ns.live := true
+        array.push(t.sess, ns)
+        if array.size(t.sess) > hist_eff
+            Sess old = array.shift(t.sess)
+            if draw_step
+                f_del(old)
+        if draw_step and ext_mode == "Until next session" and array.size(t.sess) > 1
+            f_cut(array.get(t.sess, array.size(t.sess) - 2), time)
 
-    c_bg = color.new(base_col, box_opacity)
-    c_border = show_borders ? color.new(base_col, 0) : na
+    // ── ACTIVE: update the developing session (the first bar after the session never gets here)
+    if active and array.size(t.sess) > 0
+        Sess cs = array.last(t.sess)
+        if cs.live
+            f_bar(cs, stats_on)
+            if draw_ok and draw_step
+                if not cs.drawn
+                    f_create(cs, box_on, mid_on, hl_on)
+                    cs.drawn := true
+                f_update(cs, time)
+            if stats_on and barstate.islast
+                f_live_eval(cs)
 
-    if active and not active[1]
-        hi := high
-        lo := low
-        start_time := time
-
-        b := box.new(time, hi, time, lo, xloc = xloc.bar_time, bgcolor = c_bg, border_color = c_border, border_style = b_style)
-        if show_labels
-            lb := label.new(start_time, hi, name, xloc = xloc.bar_time, style = label.style_label_down, textcolor = color.white, color = color.new(base_col, 0), size = size.small)
-
-    if active
-        hi := math.max(hi, high)
-        lo := math.min(lo, low)
-
-        box.set_right(b, time)
-        box.set_top(b, hi)
-        box.set_bottom(b, lo)
+    // ── END: active → inactive. Freeze first, classify from the frozen state afterwards.
+    if en and array.size(t.sess) > 0
+        Sess fs = array.last(t.sess)
+        if fs.live
+            fs.live := false
+            fs.t1   := t_prev
+            f_calc(fs)
+            if stats_on
+                float q = na
+                if array.size(t.nbs) >= 3
+                    float med = array.median(t.nbs)
+                    if med > 0
+                        q := fs.nbars / med
+                fs.valid := not (ign_part and fs.partial) and fs.nbars >= min_bars and (na(q) or q >= min_q / 100.0)
+                string old_ph = fs.ph_live
+                if fs.valid
+                    [ph, pc, bd, why] = f_classify(fs)
+                    [lq, lc] = f_liq(fs)
+                    fs.phase     := ph
+                    fs.phase_col := pc
+                    fs.dir       := bd
+                    fs.liq       := lq
+                    fs.liq_col   := lc
+                    fs.why       := why
+                    array.push(t.rngs, fs.rng)
+                    if array.size(t.rngs) > range_len
+                        array.shift(t.rngs)
+                    array.push(t.nbs, float(fs.nbars))
+                    if array.size(t.nbs) > range_len
+                        array.shift(t.nbs)
+                else
+                    fs.phase     := "N/A"
+                    fs.phase_col := col_neutral
+                    fs.dir       := 0
+                    fs.liq       := "—"
+                    fs.liq_col   := col_neutral
+                fs.ph_live := fs.phase
+                f_phase_ev(fs, old_ph, fs.phase)
+            if not fs.partial
+                t.last_hi := fs.hi
+                t.last_lo := fs.lo
+            if fs.drawn and draw_step
+                f_update(fs, t_prev)
+                if ext_mode != "None"
+                    Side foh = fs.oh
+                    Side fol = fs.ol
+                    if not na(fs.ln_h)
+                        line.set_extend(fs.ln_h, extend.right)
+                        foh.life := 1
+                    if not na(fs.ln_l)
+                        line.set_extend(fs.ln_l, extend.right)
+                        fol.life := 1
+                if stats_on and show_bias_lbl and fs.valid and fs.phase != "WARM-UP"
+                    fs.lb_bias := label.new(int((fs.t0 + t_prev) / 2), fs.lo, fs.phase, xloc = xloc.bar_time, style = label.style_label_up, color = color.new(fs.phase_col, 85), textcolor = fs.phase_col, size = bias_size)
+    true
 
         if show_labels
             label.set_y(lb, hi)
