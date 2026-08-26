@@ -187,7 +187,7 @@ col_info    = input.color(#448aff, "Expansion", inline = "c2", group = G_UI)
 col_warn    = input.color(#ffab40, "Warning", inline = "c2", group = G_UI)
 col_neutral = input.color(#9e9e9e, "Neutral", inline = "c3", group = G_UI)
 
-// ΓöÇΓöÇ Alerts (the new event alerts are sent through alert(): create the alert with condition "Any alert() function call")
+// ── Alerts (the new event alerts are sent through alert(): create the alert with condition "Any alert() function call")
 alert_mode = input.string("Bar Close", "Alert mode", options = ["Intrabar", "Bar Close"], group = G_ALR, tooltip = "Bar Close = price-based alerts only fire once the bar has closed. Session open/close alerts are time based and always fire on time.")
 al_phase = input.bool(false, "Phase change", inline = "al1", group = G_ALR)
 al_manip = input.bool(false, "Manipulation up/down", inline = "al1", group = G_ALR)
@@ -198,7 +198,7 @@ al_rng   = input.bool(false, "Session range EXTREME", inline = "al3", group = G_
 al_adr   = input.bool(false, "ADR threshold reached", inline = "al4", group = G_ALR)
 adr_thr  = input.int(100, "ADR %", minval = 10, maxval = 300, inline = "al4", group = G_ALR, tooltip = "Session range as % of ADR that triggers the ADR alert.")
 
-// ΓöÇΓöÇ Advanced / Engine
+// ── Advanced / Engine
 sig_mode  = input.string("Intrabar", "Drawing update", options = ["Intrabar", "Bar Close"], group = G_ADV, tooltip = "Controls when session boxes, lines and labels are drawn and updated.\nIntrabar = they follow the forming bar immediately.\nBar Close = they only change when a bar closes.\nThe dashboard and the session state are ALWAYS live on every tick, whatever you choose here.")
 flow_mode = input.string("Auto", "Flow data mode", options = ["Auto", "Real Volume", "Tick Volume", "Price Only"], group = G_ADV, tooltip = "Auto uses whatever volume the feed has. Real Volume refuses forex/CFD/index volume (tick counts) and falls back to price-only. Tick Volume labels the volume as tick volume. Price Only ignores volume. The active mode is shown in the dashboard. Volume type is detected from the symbol type, so treat it as a heuristic.")
 min_hist  = input.int(3, "Min historical sessions required", minval = 1, maxval = 30, group = G_ADV, tooltip = "Before this many completed sessions exist the phase shows WARM-UP instead of a weak classification.")
@@ -209,7 +209,7 @@ tf_sel    = input.string("All supported", "Enable on", options = ["All supported
 debug_on  = input.bool(false, "Debug mode", group = G_ADV, tooltip = "Shows a debug table (reference H/L, ratios, flow, sweep and acceptance state, failed confirmations) and start/end markers.")
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 2 ┬╖ CONSTANTS & DERIVED STYLE
+// 2 · CONSTANTS & DERIVED STYLE
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TZ_SYD = "Australia/Sydney"
 TZ_TOK = "Asia/Tokyo"
@@ -284,19 +284,128 @@ bool hist_clamped = hist_eff < hist_n
 int hist_need = math.min(min_hist, range_len)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// SETTINGS: MACRO LIQUIDITY
+// 3 · TIME / SESSION DETECTION (all calls run on every bar)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-show_pdhl = input.bool(true, "Show Previous Daily High/Low (PDH/PDL)", group="Macro Liquidity")
-show_pwhl = input.bool(true, "Show Previous Weekly High/Low (PWH/PWL)", group="Macro Liquidity")
+f_in_sess(string sess, string tz) =>
+    bool inside = not na(time(timeframe.period, sess, tz))
+    bool wk_ok  = true
+    if skip_wknd
+        int dw = dayofweek(time, tz)
+        wk_ok := dw != dayofweek.saturday and dw != dayofweek.sunday
+    inside and wk_ok
+
+bool act_syd  = tf_ok and f_in_sess(ses_syd, TZ_SYD)
+bool act_tok  = tf_ok and f_in_sess(ses_tok, TZ_TOK)
+bool act_sha  = tf_ok and f_in_sess(ses_sha, TZ_SHA)
+bool act_eur  = tf_ok and f_in_sess(ses_eur, TZ_EUR)
+bool act_usa  = tf_ok and f_in_sess(ses_usa, TZ_USA)
+bool act_asia = act_syd or act_tok or act_sha
+
+// Only build drawings for the window that can actually remain on screen
+int  draw_ms = int((hist_eff * 1.6 + 4) * 86400000)
+bool draw_ok = time >= last_bar_time - draw_ms
+int  t_prev  = nz(time[1], time)
+int  tf_ms   = tf_secs * 1000
+float NA_F   = na
+
+// Drawing gate. The session engine itself advances on EVERY tick (TradingView rolls realtime state back on each tick,
+// so the committed result is identical to a closed-bar run, and the dashboard is always live).
+// This gate only decides when boxes / lines / labels are created or changed.
+bool draw_step = sig_mode == "Intrabar" or barstate.isconfirmed
+bool alert_ok  = alert_mode == "Intrabar" or barstate.isconfirmed
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// SETTINGS: UI & AESTHETICS
+// 4 · MARKET-FLOW / VOLATILITY / STRUCTURE ENGINES (series, computed once per bar)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-box_opacity  = input.int(97, "Background Opacity (0-100)", minval=0, maxval=100, group="UI & Aesthetics")
-show_borders = input.bool(true, "Show Box Borders", group="UI & Aesthetics")
-border_style_str = input.string("Solid", "Border Style", options=["Solid", "Dashed", "Dotted"], group="UI & Aesthetics")
+float rng_bar = high - low
+float mfm     = rng_bar > 0 ? ((close - low) - (high - close)) / rng_bar : 0.0
 
-b_style = border_style_str == "Dashed" ? line.style_dashed : border_style_str == "Dotted" ? line.style_dotted : line.style_solid
+// Flow data mode: volume is used only when it exists; otherwise every bar weighs 1.0 (price-only flow)
+bool   feed_tick = syminfo.type == "forex" or syminfo.type == "cfd" or syminfo.type == "index"
+bool   vol_ok    = nz(volume) > 0
+bool   use_vol   = vol_ok and (flow_mode == "Tick Volume" or flow_mode == "Auto" or (flow_mode == "Real Volume" and not feed_tick))
+float  vol_eff   = use_vol ? volume : 1.0
+string flow_lbl  = not use_vol ? "PRICE ONLY" : (flow_mode == "Tick Volume" or (flow_mode == "Auto" and feed_tick)) ? "TICK VOL" : "REAL VOL"
+
+// ATR bar volatility (bar range / ATR). Not the same thing as session range vs. session history.
+float atr_v  = ta.atr(atr_len)
+float bar_rt = atr_v > 0 ? rng_bar / atr_v : na
+
+// Displacement: large body/range AND large range/ATR on the same bar
+float body_bar    = math.abs(close - open)
+bool  disp_core   = disp_on and rng_bar > 0 and body_bar / rng_bar >= disp_body and not na(bar_rt) and bar_rt >= disp_atr
+bool  disp_up_bar = disp_core and close > open
+bool  disp_dn_bar = disp_core and close < open
+
+// ADL momentum (volume/price-flow heuristic)
+float adl_raw  = ta.cum(mfm * vol_eff)
+float adl_f    = ta.sma(adl_raw, adl_fast)
+float adl_s    = ta.sma(adl_raw, adl_slow)
+float adl_band = 0.1 * nz(ta.stdev(adl_f - adl_s, 50))
+int   adl_dir  = (adl_f - adl_s) > adl_band ? 1 : (adl_f - adl_s) < -adl_band ? -1 : 0
+
+// Bounded money-flow oscillator (-1..+1) used for divergence (zero-volume safe)
+float cmf_num = ta.sma(mfm * vol_eff, div_lb)
+float cmf_den = ta.sma(vol_eff, div_lb)
+float cmf     = na(cmf_den) ? na : (cmf_den > 0 ? cmf_num / cmf_den : 0.0)
+
+// Price / flow divergence. Pivot mode only uses confirmed pivots, so it cannot repaint.
+int   div_pn    = math.max(2, int(div_lb / 5))
+float pvt_hi    = ta.pivothigh(high, div_pn, div_pn)
+float pvt_lo    = ta.pivotlow(low, div_pn, div_pn)
+float cmf_pv    = cmf[div_pn]
+float roll_hh   = ta.highest(high, div_lb)[1]
+float roll_ll   = ta.lowest(low, div_lb)[1]
+float roll_cmx  = ta.highest(cmf, div_lb)[1]
+float roll_cmn  = ta.lowest(cmf, div_lb)[1]
+var float pvh_px  = na
+var float pvh_cm  = na
+var int   pvh_bar = na
+var float pvl_px  = na
+var float pvl_cm  = na
+var int   pvl_bar = na
+bool dv_bear_raw = false
+bool dv_bull_raw = false
+if div_on
+    if div_piv
+        if not na(pvt_hi)
+            int pb = bar_index - div_pn
+            if not na(pvh_px) and not na(pvh_cm) and not na(cmf_pv) and pb - pvh_bar <= div_lb and pvt_hi > pvh_px and cmf_pv < pvh_cm - div_mag
+                dv_bear_raw := true
+            pvh_px  := pvt_hi
+            pvh_cm  := cmf_pv
+            pvh_bar := pb
+        if not na(pvt_lo)
+            int pb2 = bar_index - div_pn
+            if not na(pvl_px) and not na(pvl_cm) and not na(cmf_pv) and pb2 - pvl_bar <= div_lb and pvt_lo < pvl_px and cmf_pv > pvl_cm + div_mag
+                dv_bull_raw := true
+            pvl_px  := pvt_lo
+            pvl_cm  := cmf_pv
+            pvl_bar := pb2
+    else
+        dv_bear_raw := high > roll_hh and cmf < roll_cmx - div_mag
+        dv_bull_raw := low < roll_ll and cmf > roll_cmn + div_mag
+bool div_ok       = div_conf == "Intrabar" or barstate.isconfirmed
+bool div_bear_evt = div_ok and dv_bear_raw
+bool div_bull_evt = div_ok and dv_bull_raw
+
+// Structure trend: persistent HH/HL (or LH/LL) bar runs inside the lookback. Inside bars keep the run alive.
+bool bull_bar = high > high[1] and low > low[1]
+bool bear_bar = high < high[1] and low < low[1]
+var float bull_run = 0.0
+var float bear_run = 0.0
+if bull_bar
+    bull_run := bull_run + 1.0
+    bear_run := 0.0
+else if bear_bar
+    bear_run := bear_run + 1.0
+    bull_run := 0.0
+float up_pk  = ta.highest(bull_run, str_lb)
+float dn_pk  = ta.highest(bear_run, str_lb)
+float ma_e   = ta.ema(close, str_ma_n)
+float ma_s   = ta.sma(close, str_ma_n)
+float str_ma = str_ma_t == "EMA" ? ma_e : ma_s
+int str_dir  = (up_pk >= str_up and up_pk > dn_pk and (not str_ma_on or close > str_ma)) ? 1 : (dn_pk >= str_dn and dn_pk > up_pk and (not str_ma_on or close < str_ma)) ? -1 : 0
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SETTINGS: ADVANCED FEATURES
