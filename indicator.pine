@@ -1318,202 +1318,201 @@ f_dash_day(table tb, int r, array<int> cm) =>
     true
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// VARIABLES FOR SESSION RANGES
+// 14 · ENGINE EXECUTION (order matters: Asia → Europe → USA → Asia)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-var float a_hi = na, var float a_lo = na, var float a_avg = na, var int a_start = na
-var float e_hi = na, var float e_lo = na, var float e_avg = na, var int e_start = na
-var float u_hi = na, var float u_lo = na, var float u_avg = na, var int u_start = na
+var Track tSyd = Track.new(nm = "Sydney",   pfx = "SYD",   col = col_syd, sess = array.new<Sess>(), rngs = array.new<float>(), nbs = array.new<float>())
+var Track tTok = Track.new(nm = "Tokyo",    pfx = "TOK",   col = col_tok, sess = array.new<Sess>(), rngs = array.new<float>(), nbs = array.new<float>())
+var Track tSha = Track.new(nm = "Shanghai", pfx = "SHA",   col = col_sha, sess = array.new<Sess>(), rngs = array.new<float>(), nbs = array.new<float>())
+var Track tAsi = Track.new(nm = "Asia",     pfx = "AS",    col = col_tok, sess = array.new<Sess>(), rngs = array.new<float>(), nbs = array.new<float>())
+var Track tEur = Track.new(nm = nm_eur,     pfx = pf_eur,  col = col_eur, sess = array.new<Sess>(), rngs = array.new<float>(), nbs = array.new<float>())
+var Track tUsa = Track.new(nm = nm_usa,     pfx = pf_usa,  col = col_usa, sess = array.new<Sess>(), rngs = array.new<float>(), nbs = array.new<float>())
 
-// Asian Macro Data & Backtest Tag
-if time_asian_macro and not time_asian_macro[1]
-    a_hi := high, a_lo := low, a_start := time
-if time_asian_macro
-    a_hi := math.max(a_hi, high), a_lo := math.min(a_lo, low)
-if not time_asian_macro and time_asian_macro[1]
-    pts = (a_hi - a_lo) / syminfo.mintick
-    
-    // ✅ FIX: Update average FIRST
-    a_avg := na(a_avg) ? pts : (a_avg * (range_avg_len - 1) + pts) / range_avg_len
-    
-    // THEN calculate bias
-    [ph, pcol, liq, lcol, v, vcol, r_st, rcol] = get_ultra_bias(pts, a_avg, a_hi, a_lo, a_start, 25200000)
-    
-    // ✅ FIX: avoid early wrong labels
-    if show_history and not na(a_avg)
-        mid_time = int((a_start + time[1]) / 2)
-        label.new(mid_time, a_lo, ph, xloc=xloc.bar_time, style=label.style_label_up, color=color.new(pcol, 85), textcolor=pcol, size=size.tiny)
-    
-    // SAVE ALL FINAL STATES
-    a_last_phase := ph, a_last_pcol := pcol
-    a_last_liq   := liq, a_last_lcol := lcol
-    a_last_vol   := v,   a_last_vcol := vcol
-    a_last_rng   := r_st, a_last_rcol := rcol
+bool st_syd = act_syd  and not act_syd[1]
+bool en_syd = not act_syd  and act_syd[1]
+bool st_tok = act_tok  and not act_tok[1]
+bool en_tok = not act_tok  and act_tok[1]
+bool st_sha = act_sha  and not act_sha[1]
+bool en_sha = not act_sha  and act_sha[1]
+bool st_asi = act_asia and not act_asia[1]
+bool en_asi = not act_asia and act_asia[1]
+bool st_eur = act_eur  and not act_eur[1]
+bool en_eur = not act_eur  and act_eur[1]
+bool st_usa = act_usa  and not act_usa[1]
+bool en_usa = not act_usa  and act_usa[1]
 
-// Europe Data & Backtest Tag
-if time_europe and not time_europe[1]
-    e_hi := high, e_lo := low, e_start := time
-if time_europe
-    e_hi := math.max(e_hi, high), e_lo := math.min(e_lo, low)
-if not time_europe and time_europe[1]
-    pts = (e_hi - e_lo) / syminfo.mintick
-    
-    // ✅ FIX: Update average FIRST
-    e_avg := na(e_avg) ? pts : (e_avg * (range_avg_len - 1) + pts) / range_avg_len
-    
-    // THEN calculate bias
-    [ph, pcol, liq, lcol, v, vcol, r_st, rcol] = get_ultra_bias(pts, e_avg, e_hi, e_lo, e_start, 30600000)
-    
-    // ✅ FIX: avoid early wrong labels
-    if show_history and not na(e_avg)
-        mid_time = int((e_start + time[1]) / 2)
-        label.new(mid_time, e_lo, ph, xloc=xloc.bar_time, style=label.style_label_up, color=color.new(pcol, 85), textcolor=pcol, size=size.tiny)
-    
-    // SAVE ALL FINAL STATES
-    e_last_phase := ph, e_last_pcol := pcol
-    e_last_liq   := liq, e_last_lcol := lcol
-    e_last_vol   := v,   e_last_vcol := vcol
-    e_last_rng   := r_st, e_last_rcol := rcol
+bool box_asia = merge_asia and (show_syd or show_tok or show_sha)
 
-// USA Data & Backtest Tag
-if time_usa and not time_usa[1]
-    u_hi := high, u_lo := low, u_start := time
-if time_usa
-    u_hi := math.max(u_hi, high), u_lo := math.min(u_lo, low)
-if not time_usa and time_usa[1]
-    pts = (u_hi - u_lo) / syminfo.mintick
-    
-    // ✅ FIX: Update average FIRST
-    u_avg := na(u_avg) ? pts : (u_avg * (range_avg_len - 1) + pts) / range_avg_len
-    
-    // THEN calculate bias
-    [ph, pcol, liq, lcol, v, vcol, r_st, rcol] = get_ultra_bias(pts, u_avg, u_hi, u_lo, u_start, 23400000)
-    
-    // ✅ FIX: avoid early wrong labels
-    if show_history and not na(u_avg)
-        mid_time = int((u_start + time[1]) / 2)
-        label.new(mid_time, u_lo, ph, xloc=xloc.bar_time, style=label.style_label_up, color=color.new(pcol, 85), textcolor=pcol, size=size.tiny)
-    
-    // SAVE ALL FINAL STATES
-    u_last_phase := ph, u_last_pcol := pcol
-    u_last_liq   := liq, u_last_lcol := lcol
-    u_last_vol   := v,   u_last_vcol := vcol
-    u_last_rng   := r_st, u_last_rcol := rcol
+// Reference snapshots are taken BEFORE this bar updates any session, so the first bar of a session
+// can never leak into its own reference (Europe's H/L so far is still a different session from USA).
+float asi_hi_pre = f_lat(tAsi, true)
+float asi_lo_pre = f_lat(tAsi, false)
+float eur_hi_pre = f_lat(tEur, true)
+float eur_lo_pre = f_lat(tEur, false)
+float usa_hi_pre = f_lat(tUsa, true)
+float usa_lo_pre = f_lat(tUsa, false)
+
+f_step(tSyd, act_syd,  st_syd, en_syd, show_syd and not merge_asia, false, false, false, NA_F, NA_F)
+f_step(tTok, act_tok,  st_tok, en_tok, show_tok and not merge_asia, false, false, false, NA_F, NA_F)
+f_step(tSha, act_sha,  st_sha, en_sha, show_sha and not merge_asia, false, false, false, NA_F, NA_F)
+f_step(tAsi, act_asia, st_asi, en_asi, box_asia, e_mid_asia, e_hl_asia, true, usa_hi_pre, usa_lo_pre)
+f_step(tEur, act_eur,  st_eur, en_eur, show_eur, e_mid_eur,  e_hl_eur,  true, asi_hi_pre, asi_lo_pre)
+f_step(tUsa, act_usa,  st_usa, en_usa, show_usa, e_mid_usa,  e_hl_usa,  true, eur_hi_pre, eur_lo_pre)
+
+f_sweeps(tAsi)
+f_sweeps(tEur)
+f_sweeps(tUsa)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// MULTI-COLUMN DASHBOARD
+// 15 · MACRO LEVELS (right strip or full line, see section 12)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-var table dash = table.new(position.top_right, 5, 4, border_color = color.new(color.gray, 80), border_width = 1)
+var Lvl l_pdh = Lvl.new()
+var Lvl l_pdl = Lvl.new()
+var Lvl l_pwh = Lvl.new()
+var Lvl l_pwl = Lvl.new()
+var Lvl l_pmh = Lvl.new()
+var Lvl l_pml = Lvl.new()
+var Lvl l_do  = Lvl.new()
+var Lvl l_wo  = Lvl.new()
+var Lvl l_mo  = Lvl.new()
+var Lvl l_no  = Lvl.new()
 
-if show_dashboard and barstate.islast
-    // Background Colors
-    color hdr_bg = color.new(color.black, 0)      // Solid black for headers
-    color dat_bg = color.new(#1e222d, 0)          // Uniform dark slate for all internal data
-
-    // Headers
-    table.cell(dash, 0, 0, "Session",      text_color=color.white, bgcolor=hdr_bg, text_size=size.small)
-    table.cell(dash, 1, 0, "MARKET PHASE", text_color=color.white, bgcolor=hdr_bg, text_size=size.small)
-    table.cell(dash, 2, 0, "LIQUIDITY",    text_color=color.white, bgcolor=hdr_bg, text_size=size.small)
-    table.cell(dash, 3, 0, "VOLATILITY",   text_color=color.white, bgcolor=hdr_bg, text_size=size.small)
-    table.cell(dash, 4, 0, "RANGE",        text_color=color.white, bgcolor=hdr_bg, text_size=size.small)
-
-    // Asian Logic
-    a_curr = na(a_hi) or na(a_lo) ? 0 : math.round((a_hi - a_lo) / syminfo.mintick)
-    [a_l_ph, a_l_pcol, a_l_liq, a_l_lcol, a_l_vol, a_l_vcol, a_l_rng, a_l_rcol] = get_ultra_bias(a_curr, a_avg, a_hi, a_lo, a_start, 25200000)
-    
-    table.cell(dash, 0, 1, "Asian", text_color=c_asia, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 1, 1, time_asian_macro ? a_l_ph : a_last_phase, text_color=time_asian_macro ? a_l_pcol : a_last_pcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 2, 1, time_asian_macro ? a_l_liq : a_last_liq, text_color=time_asian_macro ? a_l_lcol : a_last_lcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 3, 1, time_asian_macro ? a_l_vol : a_last_vol, text_color=time_asian_macro ? a_l_vcol : a_last_vcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 4, 1, time_asian_macro ? a_l_rng : a_last_rng, text_color=time_asian_macro ? a_l_rcol : a_last_rcol, bgcolor=dat_bg, text_size=size.small)
-
-    // Europe Logic
-    e_curr = na(e_hi) or na(e_lo) ? 0 : math.round((e_hi - e_lo) / syminfo.mintick)
-    [e_l_ph, e_l_pcol, e_l_liq, e_l_lcol, e_l_vol, e_l_vcol, e_l_rng, e_l_rcol] = get_ultra_bias(e_curr, e_avg, e_hi, e_lo, e_start, 30600000)
-    
-    table.cell(dash, 0, 2, "Europe", text_color=c_europe, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 1, 2, time_europe ? e_l_ph : e_last_phase, text_color=time_europe ? e_l_pcol : e_last_pcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 2, 2, time_europe ? e_l_liq : e_last_liq, text_color=time_europe ? e_l_lcol : e_last_lcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 3, 2, time_europe ? e_l_vol : e_last_vol, text_color=time_europe ? e_l_vcol : e_last_vcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 4, 2, time_europe ? e_l_rng : e_last_rng, text_color=time_europe ? e_l_rcol : e_last_rcol, bgcolor=dat_bg, text_size=size.small)
-
-    // USA Logic
-    u_curr = na(u_hi) or na(u_lo) ? 0 : math.round((u_hi - u_lo) / syminfo.mintick)
-    [u_l_ph, u_l_pcol, u_l_liq, u_l_lcol, u_l_vol, u_l_vcol, u_l_rng, u_l_rcol] = get_ultra_bias(u_curr, u_avg, u_hi, u_lo, u_start, 23400000)
-    
-    table.cell(dash, 0, 3, "USA", text_color=c_usa, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 1, 3, time_usa ? u_l_ph : u_last_phase, text_color=time_usa ? u_l_pcol : u_last_pcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 2, 3, time_usa ? u_l_liq : u_last_liq, text_color=time_usa ? u_l_lcol : u_last_lcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 3, 3, time_usa ? u_l_vol : u_last_vol, text_color=time_usa ? u_l_vcol : u_last_vcol, bgcolor=dat_bg, text_size=size.small)
-    table.cell(dash, 4, 3, time_usa ? u_l_rng : u_last_rng, text_color=time_usa ? u_l_rcol : u_last_rcol, bgcolor=dat_bg, text_size=size.small)
+if barstate.islast and tf_ok
+    if show_pd
+        f_lvl(l_pdh, pdh, t_d, col_pd, "PDH", f_msty(line.style_dashed))
+        f_lvl(l_pdl, pdl, t_d, col_pd, "PDL", f_msty(line.style_dashed))
+    if show_pw
+        f_lvl(l_pwh, pwh, t_w, col_pw, "PWH", f_msty(line.style_solid))
+        f_lvl(l_pwl, pwl, t_w, col_pw, "PWL", f_msty(line.style_solid))
+    if show_pm
+        f_lvl(l_pmh, pmh, t_m, col_pm, "PMH", f_msty(line.style_solid))
+        f_lvl(l_pml, pml, t_m, col_pm, "PML", f_msty(line.style_solid))
+    if show_do
+        f_lvl(l_do, d_open, t_d, col_do, "DO", f_msty(line.style_dotted))
+    if show_wo
+        f_lvl(l_wo, w_open, t_w, col_wo, "WO", f_msty(line.style_dotted))
+    if show_mo
+        f_lvl(l_mo, m_open, t_m, col_mo, "MO", f_msty(line.style_dotted))
+    if show_no
+        f_lvl(l_no, ny_open, ny_open_t, col_no, pf_usa + " 00:00", f_msty(line.style_dotted))
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ENGINE 4: MACRO LIQUIDITY (PDH/PDL, PWH/PWL)
+// 16 · DASHBOARD OUTPUT (last bar only, refreshed on every tick)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-var line pdh_line = na
-var line pdl_line = na
-var label pdh_lbl = na
-var label pdl_lbl = na
+if barstate.isfirst and show_dash and tf_ok and need_note
+    table.merge_cells(dash, 0, 5, dash_cols - 1, 5)
 
-var line pwh_line = na
-var line pwl_line = na
-var label pwh_lbl = na
-var label pwl_lbl = na
-
-var int line_start_gap = 20
-var int text_pos_gap = 40
-
-if barstate.islast
-    // Daily
-    if show_pdhl
-        pdh_text = "PDH : " + str.tostring(pdh, format.mintick)
-        pdl_text = "PDL : " + str.tostring(pdl, format.mintick)
-        if na(pdh_line)
-            pdh_line := line.new(bar_index + line_start_gap, pdh, bar_index + line_start_gap + 1, pdh, color=color.gray, style=line.style_dashed, width=1, extend=extend.right)
-            pdl_line := line.new(bar_index + line_start_gap, pdl, bar_index + line_start_gap + 1, pdl, color=color.gray, style=line.style_dashed, width=1, extend=extend.right)
-            pdh_lbl  := label.new(bar_index + text_pos_gap, pdh, pdh_text, style=label.style_none, textcolor=color.gray, size=size.small)
-            pdl_lbl  := label.new(bar_index + text_pos_gap, pdl, pdl_text, style=label.style_none, textcolor=color.gray, size=size.small)
-        else
-            line.set_xy1(pdh_line, bar_index + line_start_gap, pdh)
-            line.set_xy2(pdh_line, bar_index + line_start_gap + 1, pdh)
-            line.set_xy1(pdl_line, bar_index + line_start_gap, pdl)
-            line.set_xy2(pdl_line, bar_index + line_start_gap + 1, pdl)
-            label.set_xy(pdh_lbl, bar_index + text_pos_gap, pdh)
-            label.set_text(pdh_lbl, pdh_text)
-            label.set_xy(pdl_lbl, bar_index + text_pos_gap, pdl)
-            label.set_text(pdl_lbl, pdl_text)
-
-    // Weekly
-    if show_pwhl
-        pwh_text = "PWH : " + str.tostring(pwh, format.mintick)
-        pwl_text = "PWL : " + str.tostring(pwl, format.mintick)
-        if na(pwh_line)
-            pwh_line := line.new(bar_index + line_start_gap, pwh, bar_index + line_start_gap + 1, pwh, color=color.new(color.white, 40), style=line.style_dotted, width=2, extend=extend.right)
-            pwl_line := line.new(bar_index + line_start_gap, pwl, bar_index + line_start_gap + 1, pwl, color=color.new(color.white, 40), style=line.style_dotted, width=2, extend=extend.right)
-            pwh_lbl  := label.new(bar_index + text_pos_gap, pwh, pwh_text, style=label.style_none, textcolor=color.new(color.white, 40), size=size.small)
-            pwl_lbl  := label.new(bar_index + text_pos_gap, pwl, pwl_text, style=label.style_none, textcolor=color.new(color.white, 40), size=size.small)
-        else
-            line.set_xy1(pwh_line, bar_index + line_start_gap, pwh)
-            line.set_xy2(pwh_line, bar_index + line_start_gap + 1, pwh)
-            line.set_xy1(pwl_line, bar_index + line_start_gap, pwl)
-            line.set_xy2(pwl_line, bar_index + line_start_gap + 1, pwl)
-            label.set_xy(pwh_lbl, bar_index + text_pos_gap, pwh)
-            label.set_text(pwh_lbl, pwh_text)
-            label.set_xy(pwl_lbl, bar_index + text_pos_gap, pwl)
-            label.set_text(pwl_lbl, pwl_text)
+if barstate.islast and show_dash
+    if tf_ok
+        for c = 0 to array.size(colmap) - 1
+            int id = array.get(colmap, c)
+            table.cell(dash, c, 0, array.get(dash_hdr, id), text_color = dash_txt, bgcolor = dash_hdr_bg, text_size = dash_tsz, text_halign = id == 0 ? text.align_left : text.align_center)
+        f_dash_row(dash, 1, tAsi, colmap)
+        f_dash_row(dash, 2, tEur, colmap)
+        f_dash_row(dash, 3, tUsa, colmap)
+        f_dash_day(dash, 4, colmap)
+        if need_note
+            table.cell(dash, 0, 5, note_txt, text_color = col_warn, bgcolor = dash_row_bg, text_size = dash_tsz, text_halign = text.align_left)
+    else
+        table.cell(dash, 0, 0, tf_msg, text_color = dash_txt, bgcolor = dash_hdr_bg, text_size = dash_tsz)
 
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// EXECUTE DRAWINGS
+// 17 · DEBUG (off by default)
 //━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-time_merged_asian_box = (show_sydney_box and time_sydney) or (show_tokyo_box and time_asia) or (show_china_box and time_china)
-draw_box(merge_asian_box and time_merged_asian_box, c_asia, "Asian")
+f_dc(table tb, int c, int r, string tx, color tcl) =>
+    table.cell(tb, c, r, tx, text_color = tcl, bgcolor = dash_row_bg, text_size = size.tiny, text_halign = text.align_left)
 
-draw_box(not merge_asian_box and show_sydney_box and time_sydney, c_sydney, "Sydney")
-draw_box(not merge_asian_box and show_tokyo_box  and time_asia,   c_asia,   "Tokyo")
-draw_box(not merge_asian_box and show_china_box  and time_china,  c_china,  "Shanghai")
+f_dbg_row(table tb, int r, Track t) =>
+    string a0 = t.nm
+    string a1 = "—"
+    string a2 = "—"
+    string a3 = "—"
+    string a4 = "—"
+    string a5 = "—"
+    string a6 = "—"
+    string a7 = "—"
+    string a8 = "no session"
+    if array.size(t.sess) > 0
+        Sess s = array.last(t.sess)
+        Side h = s.rh
+        Side l = s.rl
+        a1 := na(s.ref_hi) ? "—" : str.tostring(s.ref_hi, format.mintick)
+        a2 := na(s.ref_lo) ? "—" : str.tostring(s.ref_lo, format.mintick)
+        a3 := na(s.rt) ? "n/a" : str.tostring(s.rt, "0.00") + "×"
+        a4 := na(s.flow) ? "—" : str.tostring(s.flow, "0.00")
+        a5 := na(s.atr_rt) ? "—" : str.tostring(s.atr_rt, "0.00") + "×"
+        a6 := (h.swept ? "H✓ " : "H· ") + (l.swept ? "L✓" : "L·")
+        a7 := (h.brk == 0 ? "—" : h.brk == 1 ? "pend" : h.brk == 2 ? "acc" : "fail") + " / " + (l.brk == 0 ? "—" : l.brk == 1 ? "pend" : l.brk == 2 ? "acc" : "fail")
+        a8 := (s.live ? "live" : "done") + " · " + str.tostring(s.nbars) + " bars" + (s.partial ? " · partial" : "") + (s.valid ? "" : " · invalid") + (s.vol > 0 ? " · vol " + str.tostring(s.vol, format.volume) : "") + (s.why == "" ? "" : " · missing: " + s.why)
+    f_dc(tb, 0, r, a0, dash_txt)
+    f_dc(tb, 1, r, a1, dash_txt)
+    f_dc(tb, 2, r, a2, dash_txt)
+    f_dc(tb, 3, r, a3, dash_txt)
+    f_dc(tb, 4, r, a4, dash_txt)
+    f_dc(tb, 5, r, a5, dash_txt)
+    f_dc(tb, 6, r, a6, dash_txt)
+    f_dc(tb, 7, r, a7, dash_txt)
+    f_dc(tb, 8, r, a8, dash_txt)
+    true
 
-draw_box(show_london_box and time_europe, c_europe, "London")
-draw_box(show_usa_box    and time_usa,    c_usa,    "New York")
+var table dbgt = debug_on ? table.new(position.bottom_left, 9, 5, frame_color = color.new(color.gray, 60), frame_width = 1, border_color = color.new(color.gray, 80), border_width = 1) : na
 
-draw_liquidity_lines(time_asian_macro, c_asia,   "A", show_asian_lines,  show_asian_hl)
-draw_liquidity_lines(time_europe,      c_europe, "E", show_london_lines, show_europe_hl)
-draw_liquidity_lines(time_usa,         c_usa,    "U", show_usa_lines,    show_usa_hl)
+if barstate.islast and debug_on
+    f_dc(dbgt, 0, 0, "DEBUG", col_warn)
+    f_dc(dbgt, 1, 0, "REF H", col_warn)
+    f_dc(dbgt, 2, 0, "REF L", col_warn)
+    f_dc(dbgt, 3, 0, "RANGE/BENCH", col_warn)
+    f_dc(dbgt, 4, 0, "FLOW", col_warn)
+    f_dc(dbgt, 5, 0, "BAR/ATR", col_warn)
+    f_dc(dbgt, 6, 0, "SWEEP", col_warn)
+    f_dc(dbgt, 7, 0, "ACCEPT H / L", col_warn)
+    f_dc(dbgt, 8, 0, "STATE", col_warn)
+    f_dbg_row(dbgt, 1, tAsi)
+    f_dbg_row(dbgt, 2, tEur)
+    f_dbg_row(dbgt, 3, tUsa)
+    f_dc(dbgt, 0, 4, "ENGINE", col_warn)
+    f_dc(dbgt, 1, 4, "TF " + timeframe.period + " · flow " + flow_lbl + " · drawing " + sig_mode + " · sweep " + sweep_def + " · ref " + ref_mode + " · history " + str.tostring(hist_eff), dash_txt)
+
+plotshape(debug_on and tf_ok and (st_asi or st_eur or st_usa), title = "Debug: session start", style = shape.triangleup, location = location.bottom, color = color.lime, size = size.tiny)
+plotshape(debug_on and tf_ok and (en_asi or en_eur or en_usa), title = "Debug: session end", style = shape.triangledown, location = location.top, color = color.red, size = size.tiny)
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 18 · KILLZONES + OVERLAP SHADING
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+bool kz1_t = not na(time(timeframe.period, ses_kz1, TZ_USA))
+bool kz2_t = not na(time(timeframe.period, ses_kz2, TZ_USA))
+bool kz3_t = not na(time(timeframe.period, ses_kz3, TZ_USA))
+bool kz4_t = not na(time(timeframe.period, ses_kz4, TZ_USA))
+bgcolor(tf_ok and show_kz1 and kz1_t ? color.new(col_kz1, 90) : na, title = "Asia killzone")
+bgcolor(tf_ok and show_kz2 and kz2_t ? color.new(col_kz2, 90) : na, title = "Europe killzone")
+bgcolor(tf_ok and show_kz3 and kz3_t ? color.new(col_kz3, 90) : na, title = "USA AM killzone")
+bgcolor(tf_ok and show_kz4 and kz4_t ? color.new(col_kz4, 90) : na, title = "Europe close killzone")
+bgcolor(tf_ok and show_ovl and act_eur and act_usa ? color.new(col_ovl, 88) : na, title = "Europe / USA overlap")
+
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 19 · ALERTS
+//   alertcondition(): fixed alerts (session open/close are time based; price based ones follow Alert mode)
+//   alert():          event alerts with session name + event type, one combined message per bar
+//━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// "taken" = this bar trades through the CURRENT level while the previous bar had not (a level that just rolled over cannot fake a cross)
+bool x_pdh = not na(pdh) and high > pdh and nz(high[1]) <= pdh
+bool x_pdl = not na(pdl) and low  < pdl and nz(low[1])  >= pdl
+bool x_pwh = not na(pwh) and high > pwh and nz(high[1]) <= pwh
+bool x_pwl = not na(pwl) and low  < pwl and nz(low[1])  >= pwl
+bool asia_hi_taken = not act_asia and not na(tAsi.last_hi) and high > tAsi.last_hi and nz(high[1]) <= tAsi.last_hi
+bool asia_lo_taken = not act_asia and not na(tAsi.last_lo) and low  < tAsi.last_lo and nz(low[1])  >= tAsi.last_lo
+
+alertcondition(st_asi, "Asia session open", "Asia session opened on {{ticker}}")
+alertcondition(st_eur, "Europe session open", "Europe session opened on {{ticker}}")
+alertcondition(st_usa, "USA session open", "USA session opened on {{ticker}}")
+alertcondition(en_asi or en_eur or en_usa, "Macro session closed", "A session closed on {{ticker}}")
+alertcondition(alert_ok and x_pdh, "Previous day high taken", "PDH taken on {{ticker}}")
+alertcondition(alert_ok and x_pdl, "Previous day low taken", "PDL taken on {{ticker}}")
+alertcondition(alert_ok and x_pwh, "Previous week high taken", "PWH taken on {{ticker}}")
+alertcondition(alert_ok and x_pwl, "Previous week low taken", "PWL taken on {{ticker}}")
+alertcondition(alert_ok and asia_hi_taken, "Asia high taken", "Asia session high taken on {{ticker}}")
+alertcondition(alert_ok and asia_lo_taken, "Asia low taken", "Asia session low taken on {{ticker}}")
+
+if array.size(ev_q) > 0
+    if alert_ok
+        alert("Arpan Sessions · " + syminfo.tickerid + "\n" + array.join(ev_q, "\n"), alert_mode == "Intrabar" ? alert.freq_once_per_bar : alert.freq_once_per_bar_close)
+    array.clear(ev_q)
