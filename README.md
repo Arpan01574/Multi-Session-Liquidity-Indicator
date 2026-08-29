@@ -1,16 +1,27 @@
+<a id="readme-top"></a>
+
 <div align="center">
+
+<img src="assets/preview.png" alt="Multi-Session Liquidity Indicator: session boxes, liquidity levels and market-phase bias on a TradingView chart" width="100%">
+
+<br>
 
 # Multi-Session Liquidity Indicator
 
-**A Pine Script v6 overlay for TradingView that maps session liquidity, tracks market structure, and classifies real-time market bias across five global trading sessions.**
+**Session ranges, liquidity sweeps and rule-based market-phase bias, mapped live across Sydney, Tokyo, Shanghai, London and New York.**
 
-[![Pine Script](https://img.shields.io/badge/Pine%20Script-v6-131722?style=flat-square&logo=tradingview&logoColor=white)](https://www.tradingview.com/pine-script-docs/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/Arpan01574/Multi-Session-Liquidity-Indicator?style=flat-square&color=orange)](https://github.com/Arpan01574/Multi-Session-Liquidity-Indicator/stargazers)
-[![Last commit](https://img.shields.io/github/last-commit/Arpan01574/Multi-Session-Liquidity-Indicator?style=flat-square)](https://github.com/Arpan01574/Multi-Session-Liquidity-Indicator)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/Arpan01574/Multi-Session-Liquidity-Indicator/pulls)
+Published on TradingView as **Arpan's Trading Sessions** · Pine Script v6 · MIT licensed
 
-[Overview](#overview) · [Features](#features) · [How It Works](#how-it-works) · [Bias Engine](#the-bias-engine) · [Installation](#installation) · [Settings](#settings-reference) · [Disclaimer](#disclaimer)
+[![Pine Script v6](https://img.shields.io/badge/Pine%20Script-v6-131722?style=for-the-badge&logo=tradingview&logoColor=white)](https://www.tradingview.com/pine-script-docs/)
+[![TradingView](https://img.shields.io/badge/TradingView-Add%20to%20chart-2962FF?style=for-the-badge&logo=tradingview&logoColor=white)][tradingview]
+[![License: MIT](https://img.shields.io/badge/License-MIT-F2C94C?style=for-the-badge)](LICENSE)
+
+[![Stars](https://img.shields.io/github/stars/Arpan01574/Multi-Session-Liquidity-Indicator?style=flat-square&color=orange)](https://github.com/Arpan01574/Multi-Session-Liquidity-Indicator/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/Arpan01574/Multi-Session-Liquidity-Indicator?style=flat-square)](https://github.com/Arpan01574/Multi-Session-Liquidity-Indicator/commits)
+[![Open issues](https://img.shields.io/github/issues/Arpan01574/Multi-Session-Liquidity-Indicator?style=flat-square)](https://github.com/Arpan01574/Multi-Session-Liquidity-Indicator/issues)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](https://github.com/Arpan01574/Multi-Session-Liquidity-Indicator/pulls)
+
+[Quick Start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Bias Engine](#the-bias-engine) · [Alerts](#alerts) · [Settings](#settings-reference) · [FAQ](#faq)
 
 </div>
 
@@ -18,277 +29,591 @@
 
 ## Overview
 
-- 🗺️ **Session Engine** — live range boxes, liquidity lines, and midlines across five global sessions
-- 🧠 **Bias Engine** — rule-based market-phase classification: trend, expansion, accumulation, distribution, manipulation, or consolidation
-- 🎯 **Macro Liquidity** — automatic PDH/PDL and PWH/PWL reference levels
-- 📊 **Live Dashboard** — a top-right table reading out phase, liquidity, volatility, and range for every session
+A session box shows where price has traded. This indicator goes a step further: it tracks which session highs and lows have been **taken**, how price reacted when they were, and condenses the result into a live, rule-based read-out of **phase, liquidity state, range, volatility, flow and bias**, on a dashboard that updates with every tick.
 
-**Multi-Session Liquidity Indicator** — published on TradingView as *"Arpan's Trading Sessions"* — is an overlay indicator that maps how price behaves across the five major global trading sessions: **Sydney, Tokyo, Shanghai, London, and New York**.
+It is built for traders who work with session-liquidity and market-structure ideas such as premium/discount, liquidity sweeps, session highs and lows, and killzones, and who want that read automated instead of marked up by hand.
 
-On top of the session boxes and liquidity lines, it runs a rule-based **bias engine** that reads range, volatility, and volume-flow data and classifies every completed session into a market phase, then reports the result through a live on-chart dashboard.
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <b>🗺️ Session Engine</b><br>
+      Live range boxes, midlines and high/low lines for five sessions. Exchange-local hours, DST-aware, fully editable.
+    </td>
+    <td width="33%" valign="top">
+      <b>🧲 Liquidity Engine</b><br>
+      Tracks every reference high/low from <i>touched</i> to <i>swept</i> to <i>trap</i> or <i>breakout</i>, with four sweep definitions and lines that stop where they are taken.
+    </td>
+    <td width="33%" valign="top">
+      <b>🧠 Bias Engine</b><br>
+      Classifies each session into one of ten market phases, with thresholds and confirmation layers you control.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <b>🎯 Macro Levels</b><br>
+      PDH/PDL, PWH/PWL, PMH/PML, daily/weekly/monthly opens and the NY midnight open, in a clean strip beside the last candle.
+    </td>
+    <td valign="top">
+      <b>📊 Live Dashboard</b><br>
+      Asia, Europe and USA plus a DAY row. Three detail levels, eight positions, dark/light/auto themes.
+    </td>
+    <td valign="top">
+      <b>🔔 Alerts</b><br>
+      Ten ready-made conditions plus event alerts for phase changes, sweeps, manipulation, expansion and breakout acceptance.
+    </td>
+  </tr>
+</table>
 
-It's built for traders who work with session-liquidity / market-structure concepts — premium-discount, liquidity sweeps, session highs and lows — and want that read automated instead of marked up by hand.
+### At a glance
+
+| Spec | Details |
+|---|---|
+| **Platform** | TradingView · Pine Script v6 · overlay indicator |
+| **Timeframes** | Intraday charts up to 4H (clearest on 1H and below) |
+| **Markets** | Any symbol with intraday data |
+| **Sessions** | Sydney · Tokyo · Shanghai · London · New York, plus a combined Asia window |
+| **Market phases** | 10, plus FORMING / WARM-UP / N/A status flags |
+| **Alerts** | 10 ready-made conditions + event alerts via `alert()` |
+| **Configuration** | 150+ inputs in 9 groups |
+| **External data** | None. Three higher-timeframe requests (D / W / M) |
+| **License** | MIT |
 
 ## Preview
 
-![Indicator preview](Preview/Main%20Cover.png)
-
 <p align="center">
-  <img src="assets/preview.png" alt="Multi-Session Liquidity Indicator overlaid on a TradingView chart, showing session boxes, liquidity lines, and the live bias dashboard" width="850">
+  <img src="Preview/Main%20Cover.png" alt="Session boxes, liquidity lines, macro levels and the live bias dashboard on a TradingView chart" width="880">
 </p>
+<p align="center"><em>Session boxes, liquidity lines, macro levels and the live dashboard on a TradingView chart.</em></p>
 
-<p align="center"><em>Session boxes, liquidity lines, and the live bias dashboard in action.</em></p>
+Example dashboard read-out (Standard detail level, illustrative values):
+
+| SESSION | PHASE | LIQUIDITY | RANGE | % ADR | BIAS |
+|---|---|---|---|---|---|
+| ○ Asia | CONSOLIDATION | INSIDE | 28.0p  0.62× NORMAL | 35% | ◆ NEUTRAL |
+| ● Europe | MANIPULATION ↑ | TRAP LOW | 56.0p  1.06× LARGE | 70% | ▲ BULL |
+| ● USA | EXPANSION ↑ | BREAKOUT ↑ | 86.0p  1.34× EXTREME | 108% | ▲ BULL |
+| DAY | ▲ ABOVE DO | ABOVE PDH | ADR 80.0p | 112% used | EU US |
+
+`●` marks a live session, `○` a completed one.
+
+## Quick Start
+
+**From TradingView:** search **Arpan's Trading Sessions** in the Indicators menu (or [find it on TradingView][tradingview]) and click **Add to chart**.
+
+**From source**
+
+1. Open any **intraday** chart (4H or lower) on [TradingView](https://www.tradingview.com/).
+2. Open the **Pine Editor** at the bottom of the screen, clear the default template and paste in the full contents of [`indicator.pine`](indicator.pine).
+3. Click **Add to chart**.
+4. Open the indicator's **Settings** and switch on the sessions, lines, macro levels and dashboard columns you want. The defaults are a good starting point.
+
+> [!TIP]
+> Macro levels (PDH/PDL, PWH/PWL, opens) are drawn in a strip to the right of the last candle. Drag the chart to the left to leave empty space on the right and the strip comes into view. Prefer lines across the whole chart? Set **Macro Liquidity → Layout** to *Full line from period start*.
 
 ## Features
 
-### Session Range Boxes
-- Auto-drawn high/low boxes for **Sydney, Tokyo, Shanghai, London, and New York**, redrawn live as each session develops.
-- Optional **merge mode** combines Sydney + Tokyo + Shanghai into a single "Asian" box.
-- Per-box labels, adjustable background opacity, and solid / dashed / dotted borders.
+### Session engine
 
-### Session Liquidity Lines
-- **Midlines** — a dashed equilibrium (premium/discount) line at the 50% level of each session's range, with an optional live price label.
-- **High/low lines** — solid lines marking each session's extremes, with optional price labels.
-- **Carry-forward** — extends the previous session's high/low lines until the next session begins, so liquidity levels stay visible between sessions.
+- **Five sessions, one clock each.** Sydney, Tokyo, Shanghai, London and New York are evaluated in their own exchange timezone, so daylight-saving changes need no manual handling. Hours, colors and visibility are editable per session.
+- **Live range boxes.** Each box grows with its session and carries a label with its range and its size against the recent benchmark, for example `London · 56.0p · 1.1×`.
+- **Merge mode.** Collapse Sydney + Tokyo + Shanghai into a single Asian box.
+- **Midlines and high/low lines.** A 50% equilibrium line and solid session extremes for Asia, Europe and USA, with optional price labels.
+- **Smart carry-forward.** Previous highs and lows stay on the chart *until swept* (default), until the same session starts again, or not at all. A swept level is stopped and marked with ×.
+- **Historical phase labels.** The resolved phase is printed under every completed session box.
+- **History control.** Keep 1 to 100 sessions per session type. The script lowers the number automatically if it would exceed TradingView's 500-object limits and says so on the dashboard.
+- **24/7 markets.** One switch hides weekend sessions for crypto.
 
-> *The Asian midline and high/low lines are always built from the combined Sydney + Tokyo + Shanghai window — "Merge Asian Box" only changes how the range **boxes** are drawn, not the liquidity lines.*
+> [!NOTE]
+> The Asia midline and high/low lines are always built from the combined Sydney + Tokyo + Shanghai window. **Merge Asian box** only changes how the range *boxes* are drawn.
 
-### Macro Liquidity Levels
-- **PDH / PDL** — Previous Day High / Low.
-- **PWH / PWL** — Previous Week High / Low.
-- Plotted as extended reference lines with live price labels.
+### Liquidity engine
 
-### Bias Engine
-A rule-based classifier ([details below](#the-bias-engine)) that scores every completed session on four dimensions:
-
-| Dimension | What it captures |
-|---|---|
-| **Market Phase** | Trend, Expansion, Accumulation, Distribution, Manipulation, Consolidation, or Dead |
-| **Liquidity** | Stop-hunt / liquidity-trap detection above or below the session range |
-| **Volatility** | Candle range vs. `ATR(14)` — Dead, Normal, High, Extreme |
-| **Range** | Session range vs. its own rolling average — Tight, Normal, Large, Extreme |
-
-### Live Multi-Session Dashboard
-- A table (top-right) summarizing **Asian / Europe / USA** sessions across all four Bias Engine dimensions, color-coded and updated every bar.
-- Holds the last completed session's read-out on screen until the next session takes over.
-
-Example output:
-
-| Session | Market Phase | Liquidity | Volatility | Range |
-|---|---|---|---|---|
-| Asian | BULL TREND | NONE | HIGH | LARGE |
-| Europe | EXPANSION ↑ | TRAP LOW | EXTREME | EXTREME |
-| USA | CONSOLIDATION | NONE | NORMAL | NORMAL |
-
-### Historical Bias Labels
-- Prints the resolved market phase above every past session box, so you can scroll back through history and see how the engine read prior sessions.
-
-### UI & Customization
-- Full control over box opacity, borders, labels, and which sessions/lines are shown — 25+ inputs across five organized setting groups.
-
-## How It Works
-
-The script is organized into four cooperating modules — the same four called out in the codebase's own `ENGINE 1`–`ENGINE 4` comments:
-
-| Module | Core Function(s) | Responsibility |
-|---|---|---|
-| **Session Engine** | `draw_box()`, `draw_liquidity_lines()` | Builds each session's range box and plots its midline / high-low liquidity lines in real time |
-| **Bias Engine** | `get_ultra_bias()` | Runs the four-dimension classifier — phase, liquidity, volatility, range — on every completed session |
-| **Macro Liquidity** | `request.security()` (`D` / `W`) | Pulls the prior day's and prior week's high/low for PDH/PDL and PWH/PWL |
-| **Dashboard** | `table.new()` / `table.cell()` on `barstate.islast` | Renders the live top-right summary table and holds the last completed session's read-out |
-
-Each module tracks its own state with persistent (`var`) variables, so session ranges, rolling averages, and dashboard values update incrementally on every bar instead of being recomputed from scratch — the standard lightweight pattern for real-time drawing objects in Pine Script.
-
-## The Bias Engine
-
-Each completed session is scored by `get_ultra_bias()`, which combines several independent layers of logic:
-
-**1. Smart-money flow.** A custom money-flow oscillator (`admf`) built from the close-to-close change over true range, weighted by `volume × hlc3`, smoothed with an `RMA(14)`, and normalized against a 20-period average volume. It's paired with a classic Accumulation/Distribution Line (9/15 SMA crossover) for momentum confirmation, and a 20-bar lookback that flags bullish/bearish divergence between price and flow.
-
-**2. Volatility layer** — candle range compared against `ATR(14)`:
-
-| Label | Condition |
-|---|---|
-| `DEAD` | range < 0.4 × ATR |
-| `NORMAL` | default |
-| `HIGH` | range > 1.2 × ATR |
-| `EXTREME` | range > 2 × ATR |
-
-**3. Range layer** — the completed session's total range compared against its own rolling average (`Range Average Length` input, default 12 sessions):
-
-| Label | Condition |
-|---|---|
-| `TIGHT` | ratio < 0.5 |
-| `NORMAL` | ratio < 1.0 |
-| `LARGE` | ratio < 1.3 |
-| `EXTREME` | ratio ≥ 1.3 |
-
-**4. Liquidity events.** A `TRAP HIGH` / `TRAP LOW` flag fires when price wicks through a session's high or low and closes back inside it by more than half that candle's range — a stop-hunt / liquidity-grab signature.
-
-### Decision Priority
-
-These four layers feed a priority-ordered decision tree — **Dead → Manipulation → Expansion → Distribution → Trend → Accumulation → Consolidation** — evaluated top to bottom, stopping at the first condition that matches:
+Every Asia, Europe and USA session is judged against a **frozen reference high/low** taken from another session when it starts, never from its own developing range.
 
 ```mermaid
-flowchart TD
-    Start(["Session closes"]) --> Q1{"Range under 0.4× ATR?"}
-    Q1 -->|Yes| R_DEAD["DEAD"]
-    Q1 -->|No| Q2{"Liquidity trap +<br/>opposing flow?"}
-    Q2 -->|Yes| R_MANIP["MANIPULATION ↑ / ↓"]
-    Q2 -->|No| Q3{"Breakout + aligned flow<br/>+ ADL momentum,<br/>no opposing divergence?"}
-    Q3 -->|Yes| R_EXP["EXPANSION ↑ / ↓"]
-    Q3 -->|No| Q4{"Range exhaustion +<br/>bearish divergence or<br/>negative flow?"}
-    Q4 -->|Yes| R_DIST["DISTRIBUTION"]
-    Q4 -->|No| Q5{"Trend confirmed:<br/>price vs SMA20 with<br/>higher high & low<br/>(or lower high & low)?"}
-    Q5 -->|Yes| R_TREND["BULL / BEAR TREND"]
-    Q5 -->|No| Q6{"Below-average range +<br/>positive flow + bullish ADL,<br/>no breakout?"}
-    Q6 -->|Yes| R_ACC["ACCUMULATION"]
-    Q6 -->|No| R_CONS["CONSOLIDATION"]
-
-    classDef dead fill:#757575,stroke:#424242,color:#ffffff
-    classDef manip fill:#c62828,stroke:#8e0000,color:#ffffff
-    classDef exp fill:#1565c0,stroke:#0d47a1,color:#ffffff
-    classDef dist fill:#ef6c00,stroke:#e65100,color:#ffffff
-    classDef trend fill:#2e7d32,stroke:#1b5e20,color:#ffffff
-    classDef acc fill:#00897b,stroke:#00695c,color:#ffffff
-    classDef cons fill:#616161,stroke:#424242,color:#ffffff
-
-    class R_DEAD dead
-    class R_MANIP manip
-    class R_EXP exp
-    class R_DIST dist
-    class R_TREND trend
-    class R_ACC acc
-    class R_CONS cons
+flowchart LR
+    ASIA(["Asia"]) -->|"high / low is the reference for"| EUROPE(["Europe"])
+    EUROPE -->|"high / low so far is the reference for"| USA(["USA"])
+    USA -->|"high / low is the reference for"| ASIA
+    classDef asia fill:#e91e63,stroke:#ad1457,color:#ffffff
+    classDef eu fill:#2157f3,stroke:#1740b8,color:#ffffff
+    classDef us fill:#ff5d00,stroke:#c24800,color:#ffffff
+    class ASIA asia
+    class EUROPE eu
+    class USA us
 ```
 
-- **Expansion** needs a directional breakout *and* aligned smart-money flow *and* ADL momentum *and* no opposing divergence.
-- **Manipulation** needs a liquidity trap *and* flow already leaning against the trapped side.
-- **Distribution** needs range exhaustion, plus either bearish divergence or negative flow.
-- **Accumulation** needs a below-average range *and* positive flow *and* bullish ADL momentum with no breakout.
-- Anything that clears none of the above resolves to **Consolidation**.
+- **Reference modes:** *Previous Macro Session* (default, the chain above), *Previous Same Session*, or *Both* (outer envelope of the two).
+- **Four sweep definitions:** *Wick Through*, *Close Through*, *Wick + Rejection* and *Wick + Close Back Inside*, plus an optional minimum distance in ticks.
+- **Level life cycle:** inside → touched → swept → **trap** or **breakout** → **accepted** or **failed** (with optional retest).
+- **Breakout acceptance (optional):** require N consecutive closes beyond the level, a minimum distance and, if you like, a retest before a breakout counts as accepted.
+
+| Liquidity label | Meaning |
+|---|---|
+| `INSIDE` | Price has stayed inside the reference range |
+| `HIGH TOUCHED` / `LOW TOUCHED` | Level reached but not swept under the chosen definition |
+| `SWEPT HIGH` / `SWEPT LOW` / `SWEPT H+L` | Liquidity taken on one or both sides |
+| `TRAP HIGH` / `TRAP LOW` | Swept, then closed back inside on the reaction side (stop-hunt signature) |
+| `BREAKOUT ↑` / `BREAKOUT ↓` | Close beyond the reference level |
+| `RETEST ↑` / `RETEST ↓` | Breakout pulled back to the level (acceptance enabled) |
+| `BRK ↑/↓ ACCEPTED` / `FAILED` | Closes held beyond the level, or came back inside |
+
+When several apply, the label follows a fixed priority: accepted > failed > trap > retest > breakout > swept > touched > inside.
+
+### Macro levels
+
+- **Previous period highs and lows:** PDH/PDL, PWH/PWL and PMH/PML.
+- **Opens:** Daily, Weekly, Monthly and the USA midnight open (00:00 New York).
+- **Right-strip layout (default).** Lines start a set number of bars after the live candle and run to the price axis, so they never sit on top of candles. A full-line layout from the start of each period is also available.
+- **Your style:** per-level colors, one line style for all or a per-level default (dashed previous-day, solid weekly/monthly, dotted opens), adjustable label position.
+- **ADR.** The 14-day average daily range (adjustable) powers the `% ADR` column and the ADR alert.
+
+### Live dashboard
+
+A table on the last bar, refreshed on every tick. A new session appears on it from its very first bar.
+
+| Detail level | Columns |
+|---|---|
+| **Compact** | SESSION · PHASE · LIQUIDITY · BIAS |
+| **Standard** | + RANGE · % ADR |
+| **Advanced** | + BAR VOL · FLOW · STRUCTURE |
+
+The **DAY** row summarizes the day so far: position against the daily open and previous-day range, ADR used, bar volatility, the flow data mode in use, structure, and which sessions are active.
+
+### Killzones and overlap
+
+Optional background shading for the Europe × USA overlap and four killzones evaluated in New York time: Asia `20:00-23:59`, Europe `02:00-05:00`, USA AM `07:00-10:00` and Europe Close `10:00-12:00`. All editable, all off by default.
 
 ## Session Times
 
-All sessions use Pine Script's timezone-aware `time()` call, so they auto-adjust for daylight saving in their local region — no manual DST handling needed.
+All sessions use Pine Script's timezone-aware `time()` calls, so they follow daylight saving in their own region.
 
-| Session | Local Hours | Timezone |
+| Session | Default hours (local) | Timezone | Default color |
+|---|---|---|---|
+| 🇦🇺 Sydney | 10:00 – 16:00 | `Australia/Sydney` | `#00c853` |
+| 🇯🇵 Tokyo | 09:00 – 15:00 | `Asia/Tokyo` | `#e91e63` |
+| 🇨🇳 Shanghai | 09:30 – 15:00 | `Asia/Shanghai` | `#9c27b0` |
+| 🇬🇧 London | 08:00 – 16:30 | `Europe/London` | `#2157f3` |
+| 🇺🇸 New York | 09:30 – 16:00 | `America/New_York` | `#ff5d00` |
+
+The combined **Asia** window is the union of Sydney, Tokyo and Shanghai. Its box and lines use Tokyo's color. Every session's hours are editable in **Session Boxes**.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph IN["Inputs"]
+        T["Session clocks<br/>exchange-local, DST-aware"]
+        P["Price, volume, ATR"]
+        H["Daily / weekly / monthly data<br/>request.security, confirmed values"]
+    end
+    subgraph CORE["Engines"]
+        SE["Session state machine<br/>start, live, freeze"]
+        LE["Liquidity state machine<br/>touch, sweep, trap, breakout"]
+        BE["Metrics and phase classifier"]
+    end
+    subgraph OUT["Outputs"]
+        DR["Boxes, lines, labels"]
+        DB["Live dashboard"]
+        AL["Alerts"]
+        ML["Macro level strip"]
+    end
+    T --> SE
+    P --> SE
+    SE --> LE --> BE
+    LE --> DR
+    BE --> DR
+    BE --> DB
+    BE --> AL
+    LE --> AL
+    H --> ML
+    H --> DB
+    H --> AL
+```
+
+| Layer | Responsibility | Key functions |
 |---|---|---|
-| 🇦🇺 Sydney | 10:00 – 16:00 | `Australia/Sydney` |
-| 🇯🇵 Tokyo | 09:00 – 15:00 | `Asia/Tokyo` |
-| 🇨🇳 Shanghai | 09:30 – 15:00 | `Asia/Shanghai` |
-| 🇬🇧 London | 08:00 – 16:30 | `Europe/London` |
-| 🇺🇸 New York | 09:30 – 16:00 | `America/New_York` |
+| Session detection | Timezone-aware session windows, weekend filter, timeframe gate | `f_in_sess` |
+| Session state engine | Start → live → freeze, per-session range, flow, ATR and structure stats | `f_step`, `f_bar` |
+| Liquidity state machine | Frozen references, sweep definitions, breakout acceptance, line life cycle | `f_ref`, `f_sweep_hit`, `f_ref_step`, `f_brk_step`, `f_sweeps` |
+| Metrics and classifier | Range, body, close location, flow, then phase, liquidity and bias labels | `f_calc`, `f_classify`, `f_liq`, `f_live_eval` |
+| Drawing engine | Create once, update with setters, delete when a session ages out | `f_create`, `f_update`, `f_del` |
+| Macro levels | Previous-period levels and opens from D / W / M data | `request.security`, `f_lvl` |
+| Dashboard | Table rendered on the last bar, refreshed every tick | `f_dash_row`, `f_dash_day` |
+| Alerts | Fixed conditions plus a queued event stream | `alertcondition`, `f_ev`, `alert` |
 
-> Session hours are fixed in the script rather than exposed as settings, to keep the inputs panel focused. To use different hours, edit the `_session` / `_tz` variables near the top of the `.pine` file.
+### Data integrity
 
-## Installation
+- The range benchmark is built from **prior completed sessions only**, never from the session being classified.
+- Reference levels are **frozen when a session starts** and read before the new bar updates any session, so a session can never become its own reference.
+- Previous-period levels (PDH/PDL, PWH/PWL, PMH/PML) use the **last completed** higher-timeframe bar (`[1]` with `lookahead_on`). Opens are known at the start of their period.
+- Divergence uses **confirmed pivots** by default: the signal arrives late but never repaints.
+- Developing values are meant to develop. The dashboard and the "% ADR used" figure are live by design, while a session's final classification is made once, when it ends.
 
-**Requirements**
-- A free or paid [TradingView](https://www.tradingview.com/) account
-- Any symbol, any intraday timeframe — session boxes are clearest at 1H and below
+## The Bias Engine
 
-**Steps**
-1. Open any chart on [TradingView](https://www.tradingview.com/).
-2. Open the **Pine Editor** panel at the bottom of the screen.
-3. Clear the default template and paste in the full contents of this indicator's `.pine` file.
-4. Click **Add to Chart**.
-5. Open the indicator's **⚙ Settings** to toggle sessions, boxes, lines, and dashboard components to your liking.
+Each session is measured on range against a benchmark, body size, close location, volume-weighted money flow, ADR use and bar volatility. Together with its liquidity state, those measurements are run through a priority-ordered decision tree. It evaluates top to bottom and stops at the first match:
 
-Alternatively, since it's published publicly as *"Arpan's Trading Sessions,"* you can search that name directly in TradingView's Indicators & Strategies search bar and add it without copy-pasting.
+```mermaid
+flowchart TD
+    S(["Session snapshot"]) --> Q0{"Enough history?"}
+    Q0 -->|"No"| R0["WARM-UP"]
+    Q0 -->|"Yes"| Q1{"Dead? Range far below<br/>benchmark or tiny bars"}
+    Q1 -->|"Yes"| R1["DEAD"]
+    Q1 -->|"No"| Q2{"Reference swept, then closed<br/>back inside with aligned<br/>flow or close location?"}
+    Q2 -->|"Yes"| R2["MANIPULATION ↑ / ↓"]
+    Q2 -->|"No"| Q3{"Strong close beyond the<br/>reference plus confirmations?"}
+    Q3 -->|"Yes"| R3["EXPANSION ↑ / ↓"]
+    Q3 -->|"No"| Q4{"Balanced body, large range,<br/>bearish flow?"}
+    Q4 -->|"Yes"| R4["DISTRIBUTION"]
+    Q4 -->|"No"| Q5{"Balanced body, smaller range,<br/>bullish flow?"}
+    Q5 -->|"Yes"| R5["ACCUMULATION"]
+    Q5 -->|"No"| Q6{"Directional body, close at the<br/>extreme, structure confirms?"}
+    Q6 -->|"Yes"| R6["BULL / BEAR TREND"]
+    Q6 -->|"No"| R7["CONSOLIDATION"]
+
+    classDef neutral fill:#616161,stroke:#424242,color:#ffffff
+    classDef manip fill:#c62828,stroke:#8e0000,color:#ffffff
+    classDef exp fill:#1565c0,stroke:#0d47a1,color:#ffffff
+    classDef dist fill:#ef6c00,stroke:#e65100,color:#ffffff
+    classDef acc fill:#00897b,stroke:#00695c,color:#ffffff
+    classDef trend fill:#2e7d32,stroke:#1b5e20,color:#ffffff
+    class R0,R1,R7 neutral
+    class R2 manip
+    class R3 exp
+    class R4 dist
+    class R5 acc
+    class R6 trend
+```
+
+### Phase reference (default thresholds)
+
+| Phase | Bias | Trigger |
+|---|---|---|
+| `DEAD` | Neutral | Range below 0.40× benchmark, or average bar range below 0.50× ATR. Not applied while a session is still forming |
+| `MANIPULATION ↓` | Bearish | Reference high swept and the session closes back below it in the lower half of its range, with bearish flow or a close in the bottom 30% |
+| `MANIPULATION ↑` | Bullish | Reference low swept and the session closes back above it in the upper half of its range, with bullish flow or a close in the top 30% |
+| `EXPANSION ↑` | Bullish | Close above the reference high, body at least 50% of range, close in the top 35%, bullish flow, plus any confirmations you enabled |
+| `EXPANSION ↓` | Bearish | Mirror image below the reference low |
+| `DISTRIBUTION` | Bearish | Balanced body (under 40% of range), range at or above LARGE (1.0× benchmark), bearish flow |
+| `ACCUMULATION` | Bullish | Balanced body, range below LARGE, bullish flow |
+| `BULL TREND` / `BEAR TREND` | Bullish / Bearish | Body at least 50% of range, closing in the trend direction near the extreme, structure (HH/HL or LH/LL run) confirms |
+| `CONSOLIDATION` | Neutral | Nothing above matched |
+| `FORMING` | n/a | A live session that has only just started and does not match a phase yet |
+| `WARM-UP` | n/a | Fewer completed sessions than **Min historical sessions required** |
+| `N/A` | n/a | Session rejected as unreliable (partial, too few bars, or low data quality) |
+
+### Classification layers
+
+| Dimension | Classes (defaults) |
+|---|---|
+| **Range** (session range ÷ benchmark) | `TIGHT` below 0.50 · `NORMAL` below 1.00 · `LARGE` below 1.30 · `EXTREME` from 1.30 |
+| **Bar volatility** (average bar range ÷ ATR) | `DEAD` below 0.50 · `NORMAL` · `HIGH` from 1.15 · `EXTREME` from 1.50 |
+| **Flow** (volume-weighted money flow, −1 to +1) | `▲` above +0.05 · `◆` neutral · `▼` below −0.05 |
+| **Structure** (persistent HH/HL or LH/LL runs) | `▲ UP` · `◆ RANGE` · `▼ DOWN` |
+| **Bias** (from the resolved phase) | `▲ BULL` · `◆ NEUTRAL` · `▼ BEAR` |
+
+Optional confirmation layers, all off by default and individually switchable: **ADL momentum**, **flow divergence**, **displacement**, **breakout acceptance** and an **MA filter** for structure. For Expansion you can require flow, ADL agreement, displacement, a high-volatility bar, no opposing divergence and an accepted breakout.
+
+> [!IMPORTANT]
+> Phase, bias, flow, ADL and divergence are rule-based readings of price and volume. They are heuristics, not proof of institutional activity, and not a prediction.
+
+## Alerts
+
+There are two kinds of alert.
+
+**Fixed conditions.** Pick any of these directly in TradingView's *Create alert* dialog.
+
+| Condition | Fires when |
+|---|---|
+| Asia / Europe / USA session open | The first bar of the session prints (time-based) |
+| Macro session closed | Any of the three macro sessions ends (time-based) |
+| Previous day high / low taken | Price first trades through PDH / PDL |
+| Previous week high / low taken | Price first trades through PWH / PWL |
+| Asia high / low taken | After Asia has closed, price first trades through its completed high / low |
+
+**Event alerts.** Switch on the events you want under **Settings → Alerts**, then create the alert with the condition **Any alert() function call**. Events from the same bar are combined into one message.
+
+| Event | Notes |
+|---|---|
+| Phase change | Old phase → new phase |
+| Manipulation up / down | |
+| Expansion up / down | |
+| High / low / both-side sweep | Against the frozen reference levels |
+| Breakout accepted / failed | Needs **Breakout acceptance** enabled |
+| Session range EXTREME | Range at or above the EXTREME ratio |
+| ADR threshold reached | Default 100% of ADR, adjustable |
+
+Example message:
+
+```text
+Arpan Sessions · OANDA:EURUSD
+Europe | Bullish manipulation
+USA | High sweep (reference high 1.08432)
+```
+
+> [!NOTE]
+> **Alert mode** defaults to *Bar Close*, so price-based alerts only fire once the bar has closed. Session open and close alerts are time-based and always fire on time. Event alerts fire in real time only.
 
 ## Settings Reference
 
-<details>
-<summary><strong>Session Boxes</strong></summary>
-<br>
+150+ inputs in nine groups. Expand a group to see its defaults.
 
-| Input | Default | Description |
+<details>
+<summary><b>Session Boxes</b></summary>
+
+| Input | Default | Notes |
 |---|---|---|
-| Show Sydney Box | `true` | Toggle the Sydney session's range box |
-| Show Tokyo Box | `true` | Toggle the Tokyo session's range box |
-| Show Shanghai Box | `true` | Toggle the Shanghai session's range box |
-| Merge Asian Box (Syd+Tok+Sha) | `false` | Draw one combined "Asian" box instead of three separate ones |
-| Show London Box | `true` | Toggle the London session's range box |
-| Show New York Box | `true` | Toggle the New York session's range box |
+| Sydney / Tokyo / Shanghai / London / New York | On | Per-session toggle and color |
+| Session hours | `1000-1600` · `0900-1500` · `0930-1500` · `0800-1630` · `0930-1600` | Read in each session's own timezone, DST-aware |
+| Merge Asian box | Off | One combined box instead of three |
+| Hide weekend sessions | Off | For 24/7 markets such as crypto |
+| Sessions kept on chart | `10` | 1 to 100 per session type, auto-capped to the 500-object limits |
 
 </details>
 
 <details>
-<summary><strong>Session Lines</strong></summary>
-<br>
+<summary><b>Session Lines and Liquidity</b></summary>
 
-| Input | Default | Description |
+| Input | Default | Notes |
 |---|---|---|
-| Show Asian Session Midline | `true` | Draw the 50% equilibrium line for the combined Asian session |
-| Show Europe Session Midline | `true` | Draw the 50% equilibrium line for the London session |
-| Show USA Session Midline | `true` | Draw the 50% equilibrium line for the New York session |
-| Show Asian Session High/Low | `true` | Draw solid high/low liquidity lines for the Asian session |
-| Show Europe Session High/Low | `true` | Draw solid high/low liquidity lines for the London session |
-| Show USA Session High/Low | `true` | Draw solid high/low liquidity lines for the New York session |
+| Midline (master + Asia / Europe / USA) | On | 50% equilibrium line |
+| High/Low (master + Asia / Europe / USA) | On | Solid session extremes |
+| Midline price / H/L price | On | Price labels |
+| Midline style · width | Dashed · `1` | |
+| H/L style · width | Solid · `1` | |
+| Carry forward previous H/L | Until swept | Until swept · Until next session · None |
+| Mark swept levels with × | On | |
+| Liquidity reference | Previous Macro Session | Previous Macro Session · Previous Same Session · Both |
+| Sweep definition | Wick Through | Wick Through · Close Through · Wick + Rejection · Wick + Close Back Inside |
+| Min sweep distance (ticks) | `0` | |
+| Min rejection (% of bar range) | `50` | Used by Wick + Rejection |
+| Max bars to confirm rejection | `3` | Used by Wick + Close Back Inside |
+| Breakout acceptance | Off | Adds ACCEPTED / FAILED / RETEST states |
+| Bars | `3` | Consecutive closes beyond the level |
+| Min close beyond level (ticks) | `0` | |
+| Retest required before acceptance | Off | |
 
 </details>
 
 <details>
-<summary><strong>Macro Liquidity</strong></summary>
-<br>
+<summary><b>Macro Liquidity</b></summary>
 
-| Input | Default | Description |
+| Input | Default | Notes |
 |---|---|---|
-| Show Previous Daily High/Low (PDH/PDL) | `true` | Plot yesterday's high and low as extended reference lines |
-| Show Previous Weekly High/Low (PWH/PWL) | `true` | Plot last week's high and low as extended reference lines |
+| Previous Day H/L (PDH/PDL) | On | |
+| Previous Week H/L (PWH/PWL) | On | |
+| Previous Month H/L (PMH/PML) | Off | |
+| Daily Open | On | |
+| Weekly Open | Off | |
+| Monthly Open | Off | |
+| USA Midnight Open (00:00 NY) | On | |
+| Line style | Per level | Per level · Solid · Dashed · Dotted |
+| Width | `1` | |
+| Labels | On | |
+| Layout | Right strip | Right strip (gap after last candle) · Full line from period start |
+| Gap after last candle (bars) | `20` | Right-strip layout |
+| Strip length (bars) | `80` | Only when "Keep lines going to the price axis" is off |
+| Keep lines going to the price axis | On | |
+| Label position (strip) | Fixed offset | Fixed offset · Line start · Line end |
+| Offset (bars) | `40` | Distance of the label from the live candle |
+| Offset (bars, full-line layout only) | `2` | |
 
 </details>
 
 <details>
-<summary><strong>UI & Aesthetics</strong></summary>
-<br>
+<summary><b>Bias / Intelligence</b></summary>
 
-| Input | Default | Description |
+| Input | Default | Notes |
 |---|---|---|
-| Background Opacity (0–100) | `97` | Transparency of the box fill — higher is more transparent |
-| Show Box Borders | `true` | Toggle borders on session boxes |
-| Border Style | `Solid` | `Solid`, `Dashed`, or `Dotted` box border style |
+| Range benchmark · lookback | SMA · `12` | SMA, EMA or Median of prior completed sessions (3 to 30) |
+| ADR length (days) | `14` | |
+| DEAD if range / benchmark below | `0.40` | |
+| TIGHT / LARGE / EXTREME range ratio | `0.50` / `1.00` / `1.30` | Range classes on the dashboard |
+| Balanced if body / range below | `0.40` | |
+| Directional if body / range from | `0.50` | |
+| Close-location conviction | `0.65` | |
+| Money-flow threshold (±) | `0.05` | |
+| ATR bar volatility | On · length `14` | Dead below `0.50` · High from `1.15` · Extreme from `1.50` |
+| ADL momentum | Off | Fast `9` · slow `15` |
+| Flow divergence | Off | Lookback `20` · min magnitude `0.05` · confirmed pivots on · confirm on Bar Close |
+| Displacement filter | Off | Body/range from `0.70` · range/ATR from `1.20` · optional close beyond reference |
+| Structure trend | On | Lookback `20` · min HH/HL `3` · min LH/LL `3` · optional MA filter (EMA `50`) |
+| Expansion requires… | Flow only | Flow · ADL agreement · displacement · high-volatility bar · no opposing divergence · accepted breakout |
+| Trend phases require structure | On | |
 
 </details>
 
 <details>
-<summary><strong>Advanced Features</strong></summary>
-<br>
+<summary><b>Dashboard</b></summary>
 
-| Input | Default | Description |
+| Input | Default | Notes |
 |---|---|---|
-| Show Box Labels | `true` | Toggle the session-name label at the top of each box |
-| Show Smart Range Dashboard | `true` | Displays a clean table in the corner with range intelligence |
-| Show Historical Bias Labels | `true` | Prints the session state above past boxes for backtesting |
-| Range Average Length (Days) | `12` | Number of past sessions used to compute each session's rolling range average |
-| Show Premium/Discount Midline | `true` | Draws a dashed equilibrium line at 50% of the session range |
-| Show Midline Price Label | `true` | Displays the exact price value next to the midline |
-| Show Session High/Low Lines | `true` | Draws lines at the session extremes |
-| Show Price on H/L Lines | `true` | Displays the exact price value next to the high/low lines |
-| Carry Forward Previous H/L | `true` | Extends the high/low liquidity lines until the start of the next session |
+| Show smart range dashboard | On | |
+| Detail level | Standard | Compact · Standard · Advanced |
+| Position | Top Right | Eight positions |
+| Text size | Small | Tiny · Small · Normal |
+| Theme | Dark | Dark · Light · Auto (chart) |
 
 </details>
+
+<details>
+<summary><b>Killzones and Overlap (New York time)</b></summary>
+
+| Input | Default | Notes |
+|---|---|---|
+| Highlight Europe × USA overlap | Off | |
+| Asia KZ | Off | `2000-2359` |
+| Europe KZ | Off | `0200-0500` |
+| USA AM KZ | Off | `0700-1000` |
+| Europe Close KZ | Off | `1000-1200` |
+
+</details>
+
+<details>
+<summary><b>UI and Aesthetics</b></summary>
+
+| Input | Default | Notes |
+|---|---|---|
+| Session naming | City (London / New York) | Or Region (Europe / USA). Applies to box tags |
+| Box fill transparency | `88` | |
+| Box borders · width · style | On · `1` · Solid | |
+| Session labels · range stats in label | On · On | |
+| Session label size · price label size | Small · Small | |
+| Historical phase labels · size | On · Tiny | |
+| Bullish / Bearish / Expansion / Warning / Neutral | `#00e676` · `#ff5252` · `#448aff` · `#ffab40` · `#9e9e9e` | |
+
+</details>
+
+<details>
+<summary><b>Alerts</b></summary>
+
+| Input | Default | Notes |
+|---|---|---|
+| Alert mode | Bar Close | Intrabar or Bar Close |
+| Phase change · Manipulation · Expansion · Sweep · Breakout · Range EXTREME · ADR threshold | Off | Event alerts via `alert()` |
+| ADR % | `100` | Session range as % of ADR that triggers the ADR alert |
+
+</details>
+
+<details>
+<summary><b>Advanced / Engine</b></summary>
+
+| Input | Default | Notes |
+|---|---|---|
+| Drawing update | Intrabar | Intrabar or Bar Close. The dashboard is always live |
+| Flow data mode | Auto | Auto · Real Volume · Tick Volume · Price Only |
+| Min historical sessions required | `3` | Before this, the phase shows WARM-UP |
+| Ignore incomplete (partial) sessions | On | |
+| Min bars per session | `3` | |
+| Min data quality (%) | `50` | Session bar count versus recent sessions |
+| Enable on | All supported | All supported · 1m-5m · 5m-15m · 15m-1H · 1H-4H |
+| Debug mode | Off | Debug table plus session start/end markers |
+
+</details>
+
+### Starter configurations
+
+Starting points built from the inputs above. Adjust them to your own workflow.
+
+| Profile | Changes from the defaults |
+|---|---|
+| **Minimal** | Dashboard → Compact · turn off Previous Week and USA Midnight Open · Session labels → hide range stats · Historical phase labels → off |
+| **Full intelligence** | Dashboard → Advanced · enable ADL momentum, Flow divergence, Displacement filter and Breakout acceptance · switch on the event alerts you care about |
+| **Strict sweeps** | Sweep definition → Wick + Rejection · raise Min sweep distance · Liquidity reference → Both |
+| **Crypto 24/7** | Hide weekend sessions → on · Flow data mode → Real Volume |
 
 ## Technical Notes
 
 - Pine Script **v6**, single-file overlay indicator.
-- The session engine (boxes, lines, dashboard) runs entirely on real-time bar data — no `request.security()` calls, so no higher-timeframe repainting risk there.
-- The only `request.security()` calls are `PDH/PDL/PWH/PWL`, which pull already-closed `[1]` values with `lookahead_on` — the standard safe pattern for referencing a prior, fixed higher-timeframe bar.
-- Drawing limits: `max_boxes_count = 5000`, `max_lines_count = 500`, `max_labels_count = 500`, `max_bars_back = 5000`.
+- Drawing limits: `max_boxes_count`, `max_lines_count` and `max_labels_count` are all `500` (TradingView's maximum), with `max_bars_back = 500`. The number of sessions kept is capped automatically to stay inside them.
+- Drawing objects are **created once and updated with setters**, and deleted when a session ages out. Drawings are only built for the recent window that can stay on screen.
+- Session state advances on every tick. **Drawing update** only controls when boxes, lines and labels change.
+- The session engine uses no `request.security()`. The only three calls (D, W, M) pull previous-period levels, opens and ADR.
+- Flow uses volume when the feed has it. FX, CFD and index feeds carry tick volume, which the DAY row labels as `TICK VOL`. Without volume the engine falls back to price-only flow.
+- Intraday only: charts up to 4H. Above 1H a dashboard notice warns that sessions contain few bars.
+
+## FAQ
+
+<details>
+<summary><b>Nothing is drawn, or the dashboard shows a message instead of a table.</b></summary>
+
+The indicator needs an intraday chart of 4H or lower. Also check **Advanced / Engine → Enable on**. The dashboard says why it is idle: *Sessions need an intraday chart (4H or lower)* or *Disabled on this timeframe*.
+
+</details>
+
+<details>
+<summary><b>A session never appears on my symbol.</b></summary>
+
+Sessions follow the clock, not the market. If your symbol has no bars during those hours (a US stock during Tokyo hours, for example) there is nothing to draw. Session hours are editable under **Session Boxes**.
+
+</details>
+
+<details>
+<summary><b>The phase shows WARM-UP.</b></summary>
+
+The benchmark needs a few completed sessions first (**Min historical sessions required**, default 3). Scroll back to load more history, or lower the setting.
+
+</details>
+
+<details>
+<summary><b>The phase shows N/A.</b></summary>
+
+The session was rejected as unreliable: it was already running on the first loaded bar, had fewer bars than **Min bars per session**, or its bar count fell below **Min data quality** compared with recent sessions.
+
+</details>
+
+<details>
+<summary><b>The phase shows FORMING instead of DEAD or CONSOLIDATION.</b></summary>
+
+A live session that has only just started has too few bars to judge, so it is labelled FORMING. DEAD cannot trigger until the range has had time to build.
+
+</details>
+
+<details>
+<summary><b>The dashboard changes before the bar closes. Is that repainting?</b></summary>
+
+It is by design. The dashboard and session state follow every tick, and a session's final classification is made once, when it ends. **Drawing update → Bar Close** delays boxes, lines and labels. **Alert mode → Bar Close** (the default) makes price-based alerts wait for a closed bar.
+
+</details>
+
+<details>
+<summary><b>I cannot see the PDH / PDL / PWH / PWL lines.</b></summary>
+
+In the default right-strip layout they start 20 bars to the right of the last candle. Drag the chart to the left to reveal them, or switch **Macro Liquidity → Layout** to *Full line from period start*.
+
+</details>
+
+<details>
+<summary><b>My event alerts do not fire.</b></summary>
+
+Switch the event on under **Settings → Alerts**, then create the alert with the condition **Any alert() function call**. Event alerts fire in real time only.
+
+</details>
+
+<details>
+<summary><b>A warning about capped history appears on the dashboard.</b></summary>
+
+TradingView limits each drawing type to 500 objects. When your settings would exceed that, the script lowers **Sessions kept on chart** automatically and tells you.
+
+</details>
 
 ## Contributing
 
 Issues and pull requests are welcome.
 
 1. Fork the repo and branch off `main`.
-2. Make your changes in the `.pine` file.
-3. Test on a live or replay chart across a few symbols/timeframes.
-4. Open a pull request describing what changed and why — if it touches Bias Engine logic, a chart screenshot of the scenario helps a lot.
+2. Make your changes in [`indicator.pine`](indicator.pine) (Pine Script v6).
+3. Test on a live or replay chart across a few symbols and timeframes. **Debug mode** (Advanced / Engine) shows reference levels, ratios, flow, and sweep and acceptance state per session.
+4. Open a pull request describing what changed and why. For Bias Engine or liquidity-logic changes, include a chart screenshot of the scenario.
+
+House rules: no look-ahead (see [Data integrity](#data-integrity)), create drawings once and update them with setters, stay inside the 500-object limits, and give every new input a group and a tooltip.
+
+**Reporting a bug?** Include the symbol, timeframe, a screenshot of your settings and the Debug table.
 
 ## Disclaimer
 
-This indicator is provided for **educational and informational purposes only** and does not constitute financial advice. It is a technical-analysis tool built on historical price, volume, and range data — it does not predict future price movement. Always backtest thoroughly and use sound risk management before trading with real capital.
+This indicator is provided for **educational and informational purposes only** and does not constitute financial advice. It is a technical-analysis tool built on historical price, volume and range data. Its phase, bias and flow readings are rule-based heuristics, not proof of institutional activity, and it does not predict future price movement. Always test thoroughly and use sound risk management before trading with real capital.
 
 ## License
 
@@ -296,12 +621,17 @@ Licensed under the [MIT License](LICENSE).
 
 ## Author
 
-Built by **Arpan** — [GitHub @Arpan01574](https://github.com/Arpan01574)
+Built by **Arpan** · [GitHub @Arpan01574](https://github.com/Arpan01574)
 
 ---
 
 <div align="center">
 
-⭐ If this indicator is useful to you, consider starring the repo — it helps others find it too.
+⭐ If this indicator is useful to you, consider starring the repo. It helps other traders find it.
+
+[Back to top](#readme-top)
 
 </div>
+
+<!-- Swap in your direct TradingView script URL here once you have it -->
+[tradingview]: https://www.tradingview.com/scripts/search/Arpan%27s%20Trading%20Sessions/
