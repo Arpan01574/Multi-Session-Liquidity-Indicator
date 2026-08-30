@@ -1,11 +1,3 @@
-<a id="readme-top"></a>
-
-<div align="center">
-
-<img src="assets/preview.png" alt="Multi-Session Liquidity Indicator: session boxes, liquidity levels and market-phase bias on a TradingView chart" width="100%">
-
-<br>
-
 # Multi-Session Liquidity Indicator
 
 **Session ranges, liquidity sweeps and rule-based market-phase bias, mapped live across Sydney, Tokyo, Shanghai, London and New York.**
