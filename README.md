@@ -1,3 +1,7 @@
+<a id="readme-top"></a>
+
+<div align="center">
+
 # Multi-Session Liquidity Indicator
 
 **Session ranges, liquidity sweeps and rule-based market-phase bias, mapped live across Sydney, Tokyo, Shanghai, London and New York.**
